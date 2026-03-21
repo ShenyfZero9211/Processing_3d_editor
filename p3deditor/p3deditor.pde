@@ -9,6 +9,8 @@ EditorCamera editorCamera;
 UIManager ui;
 Raycaster raycaster;
 CommandInterpreter interpreter;
+ScriptManager scriptManager;
+PFont mainFont;
 Robot robot;
 
 int draggingAxis = 0; // 0=none, 1=X, 2=Y, 3=Z
@@ -51,6 +53,12 @@ void setup() {
   size(1280, 720, P3D);
   surface.setLocation((displayWidth - width) / 2, (displayHeight - height) / 2);
   
+  // Initialize Chinese-compatible font
+  mainFont = createFont("Microsoft YaHei", 14, true); 
+  if (mainFont == null) mainFont = createFont("SimHei", 14, true);
+  if (mainFont == null) mainFont = createFont("SansSerif", 14, true);
+  textFont(mainFont);
+  
   try {
     robot = new Robot();
   } catch (AWTException e) {
@@ -64,6 +72,9 @@ void setup() {
   ui = new UIManager(scene, interpreter);
   raycaster = new Raycaster();
   
+  scriptManager = new ScriptManager(interpreter);
+  interpreter.setScriptManager(scriptManager);
+  
   scene.addEntity("Cube 1", "Cube");
   scene.addEntity("Sphere 1", "Sphere");
   scene.addEntity("Light 1", "PointLight");
@@ -73,25 +84,30 @@ void setup() {
 void draw() {
   background(40);
   
+  if (scriptManager != null) scriptManager.update();
+  
   editorCamera.update(keyStates); // Process WASD movement frame by frame
   
   // Apply camera
   editorCamera.apply(this);
   
-  // Dynamic Scene Lighting
+  // Dynamic Scene Lighting (Capped at 5 to prevent Processing crash, plus global lights)
   ambientLight(70, 70, 70);
+  directionalLight(40, 45, 50, 0.5f, -0.2f, 0.5f);
   lightSpecular(200, 200, 200);
+  
+  int lightCount = 0;
   for (Entity e : scene.entities) {
     if (e.type.equals("PointLight")) {
-      PVector p = e.getWorldPosition();
-      float r = red(e.col) * e.lightIntensity;
-      float g = green(e.col) * e.lightIntensity;
-      float b = blue(e.col) * e.lightIntensity;
-      
-      // factor = 1 / (1 + linear*d + quadratic*d^2)
-      // We use quadratic falloff to map lightRange to a 50% drop at the range distance
-      lightFalloff(1.0, 0.0, 1.0 / sq(e.lightRange)); 
-      pointLight(r, g, b, p.x, p.y, p.z);
+      if (lightCount < 5) {
+        PVector p = e.getWorldPosition();
+        float r = red(e.col) * e.lightIntensity;
+        float g = green(e.col) * e.lightIntensity;
+        float b = blue(e.col) * e.lightIntensity;
+        lightFalloff(1.0, 0.0, 1.0 / sq(e.lightRange)); 
+        pointLight(r, g, b, p.x, p.y, p.z);
+        lightCount++;
+      }
     }
   }
   

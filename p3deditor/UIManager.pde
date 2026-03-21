@@ -132,6 +132,7 @@ class UIManager {
   }
 
   void render() {
+    p3deditor.this.textFont(p3deditor.this.mainFont);
     textAlign(LEFT, BASELINE);
     if (!showUI) return;
     
@@ -769,7 +770,11 @@ class UIManager {
     
     // Fallback: If console is not active and not editing inspector, allow shortcuts like Delete
     if (!debugConsole.active && !isEditingText()) {
-      if (key == BACKSPACE || keyCode == DELETE) deleteSelection();
+      boolean isDelete = (keyCode == DELETE || key == DELETE || key == 127);
+      boolean isBackspace = (key == BACKSPACE || key == 8);
+      if (isDelete || isBackspace) {
+        deleteSelection();
+      }
     }
   }
   

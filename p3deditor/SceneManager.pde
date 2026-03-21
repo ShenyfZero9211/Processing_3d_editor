@@ -27,13 +27,7 @@ class SceneManager {
   }
   
   void render(PApplet app) {
-    // Global Base Illumination
-    app.ambientLight(50, 50, 50);
-    app.lightSpecular(180, 180, 180);
-    
-    // Note: The main lighting is now handled in p3deditor.draw() via PointLight entities.
-    // We keep a very weak fill here just to prevent total blackness on backfaces.
-    app.directionalLight(40, 45, 50, 0.5f, -0.2f, 0.5f); 
+    // Note: Global lighting is now handled in p3deditor.draw() to respect the 8-light limit.
     
     // ONLY start rendering from root entities (hierarchical recursion handles children)
     for(Entity e : entities) {

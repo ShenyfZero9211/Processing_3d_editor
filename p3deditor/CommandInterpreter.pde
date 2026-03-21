@@ -7,9 +7,14 @@ class CommandInterpreter {
   HashMap<String, String> aliases = new HashMap<String, String>();
   int recursionDepth = 0;
   final int MAX_RECURSION = 10;
+  ScriptManager scriptManager;
   
   CommandInterpreter(SceneManager s) {
     this.scene = s;
+  }
+  
+  void setScriptManager(ScriptManager sm) {
+    this.scriptManager = sm;
   }
   
   String execute(String cmdLine) {
@@ -97,9 +102,23 @@ class CommandInterpreter {
         if (type.equals("cube")) { scene.addEntity("Cube", "Cube"); }
         else if (type.equals("sphere")) { scene.addEntity("Sphere", "Sphere"); }
         else if (type.equals("plane")) { scene.addEntity("Plane", "Plane"); }
-        else if (type.equals("light") || type.equals("pointlight")) { scene.addEntity("Point Light", "PointLight"); }
+        else if (type.equals("light") || type.equals("pointlight")) { 
+          // Safety Check: Total PointLights limited to 5
+          int existingLights = 0;
+          for (Entity e : scene.entities) if (e.type.equals("PointLight")) existingLights++;
+          if (existingLights >= 5) return "Error: Maximum 5 point lights reached (Stability Guard)";
+          
+          scene.addEntity("Light", "PointLight"); 
+        }
         else return "Error: Unknown type: " + type;
         return "SUCCESS: Created " + type;
+      }
+      else if (rawCmd.equals("rename") || rawCmd.equals("name")) {
+        if (parts.size() < 3) return "Error: rename <oldName> <newName>";
+        Entity e = findEntity(parts.get(1));
+        if (e == null) return "Error: Entity not found: " + parts.get(1);
+        e.name = parts.get(2);
+        return "SUCCESS: Renamed '" + parts.get(1) + "' to '" + parts.get(2) + "'";
       }
       else if (rawCmd.equals("alias")) {
         if (parts.size() == 1) {
@@ -121,12 +140,42 @@ class CommandInterpreter {
         aliases.remove(parts.get(1).toLowerCase());
         return "SUCCESS: Removed alias '" + parts.get(1) + "'";
       }
-      else if (rawCmd.equals("exec") || rawCmd.equals("run")) {
+      else if (rawCmd.equals("clear") || rawCmd.equals("deleteall")) {
+        scene.entities.clear();
+        scene.selectedEntities.clear();
+        scene.nextEntityId = 1;
+        return "SUCCESS: Cleared entire scene";
+      }
+      else if (rawCmd.equals("run")) {
+        if (parts.size() < 2) return "Error: run <filename.p3des>";
+        String filename = parts.get(1);
+        if (!filename.endsWith(".p3des")) filename += ".p3des";
+        String[] lines = p3deditor.this.loadStrings(filename);
+        if (lines == null) return "Error: Script not found: " + filename;
+        if (scriptManager != null) {
+          scriptManager.runScript(filename, String.join("\n", lines));
+          return "SUCCESS: Started logic-script " + filename;
+        }
+        return "Error: ScriptManager not initialized";
+      }
+      else if (rawCmd.equals("stop")) {
+        if (scriptManager != null) {
+          scriptManager.stopAll();
+          return "SUCCESS: Stopped all scripts";
+        }
+        return "Error: ScriptManager not initialized";
+      }
+      else if (rawCmd.equals("exec") || rawCmd.equals("script")) {
         if (parts.size() < 2) return "Error: exec <filename>";
         return executeScript(parts.get(1));
       }
+      else if (rawCmd.equals("echo") || rawCmd.equals("print") || rawCmd.equals("say")) {
+        StringBuilder sb = new StringBuilder();
+        for (int i=1; i<parts.size(); i++) sb.append(parts.get(i)).append(i == parts.size()-1 ? "" : " ");
+        return sb.toString();
+      }
       else if (rawCmd.equals("help")) {
-        return "CMDS: move, tp, color, scale, delete, alias, unalias, exec, help";
+        return "CMDS: move, tp, color, scale, delete, rename, clear, echo, alias, unalias, exec, run, stop, help";
       }
     } catch (Exception ex) {
       return "Error: " + ex.getMessage();
@@ -162,6 +211,7 @@ class CommandInterpreter {
         char c = line.charAt(i);
         if (c == '\"') {
             inQuotes = !inQuotes;
+            // DO NOT append the quote character itself
         } else if (c == ' ' && !inQuotes) {
             if (currentArg.length() > 0) {
                 args.add(currentArg.toString());
@@ -178,7 +228,9 @@ class CommandInterpreter {
   }
   
   Entity findEntity(String nameOrId) {
-    for (Entity e : scene.entities) {
+    // Search backwards to prioritize the NEWEST entity if multiple share a name
+    for (int i = scene.entities.size() - 1; i >= 0; i--) {
+      Entity e = scene.entities.get(i);
       if (e.name.equalsIgnoreCase(nameOrId)) return e;
       if (str(e.id).equals(nameOrId)) return e;
     }

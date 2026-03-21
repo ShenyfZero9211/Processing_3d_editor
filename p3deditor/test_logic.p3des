@@ -1,0 +1,31 @@
+# P3DES Logic Comprehensive Test
+# This script creates a sequence of objects over time
+
+set xPos -100
+set count 0
+
+# 1. While loop creating a row of cubes
+while $count < 5
+  create cube
+  move cube $xPos 0 0
+  add xPos 40
+  add count 1
+  wait 500
+endwhile
+
+# 2. Conditional check
+if $count == 5
+  create sphere
+  move sphere 0 100 0
+  color sphere #FFD700
+  wait 1000
+endif
+
+# 3. For loop creating lights
+for j 0 60 20
+  create light
+  move light $j -50 50
+  wait 300
+endfor
+
+echo "P3DES: Logic script test completed successfully!"
