@@ -1,13 +1,13 @@
 class SceneManager {
   ArrayList<Entity> entities = new ArrayList<Entity>();
-  Entity selectedEntity = null;
+  ArrayList<Entity> selectedEntities = new ArrayList<Entity>();
   Gizmo gizmo = new Gizmo();
   int nextEntityId = 1;
   
   void addEntity(String name, String type) {
     Entity e = new Entity(nextEntityId++, name, type);
     entities.add(e);
-    selectEntity(e);
+    selectEntity(e, false);
   }
   
   void render(PApplet app) {
@@ -22,22 +22,29 @@ class SceneManager {
       e.render(app);
     }
     
-    // Render Gizmo over selected entity without depth testing
-    if (selectedEntity != null) {
-      app.hint(DISABLE_DEPTH_TEST);
-      gizmo.render(app, selectedEntity);
-      app.hint(ENABLE_DEPTH_TEST);
+    // Render Gizmo over selected entities
+    if (!selectedEntities.isEmpty()) {
+      app.hint(PConstants.DISABLE_DEPTH_TEST);
+      gizmo.render(app, this);
+      app.hint(PConstants.ENABLE_DEPTH_TEST);
     }
   }
   
-  void selectEntity(Entity e) {
-    if (selectedEntity != null) {
-      selectedEntity.selected = false;
+  void selectEntity(Entity e, boolean ctrlDown) {
+    if (!ctrlDown) {
+      clearSelection();
     }
-    selectedEntity = e;
-    if (selectedEntity != null) {
-      selectedEntity.selected = true;
+    if (e != null && !selectedEntities.contains(e)) {
+      selectedEntities.add(e);
+      e.selected = true;
     }
+  }
+  
+  void clearSelection() {
+    for (Entity sel : selectedEntities) {
+      sel.selected = false;
+    }
+    selectedEntities.clear();
   }
   
   void saveScene(File file) {
@@ -71,8 +78,13 @@ class SceneManager {
     }
     root.setJSONArray("entities", entArr);
     
-    saveJSONObject(root, file.getAbsolutePath());
-    println("Saved scene to " + file.getAbsolutePath());
+    String path = file.getAbsolutePath();
+    if (!path.toLowerCase().endsWith(".p3de")) {
+      path += ".p3de";
+    }
+    
+    saveJSONObject(root, path);
+    println("Saved scene to " + path);
   }
   
   void loadScene(File file) {
@@ -81,7 +93,7 @@ class SceneManager {
     try {
       JSONObject root = loadJSONObject(file.getAbsolutePath());
       entities.clear();
-      selectedEntity = null;
+      clearSelection();
       
       nextEntityId = root.getInt("nextEntityId");
       

@@ -46,6 +46,15 @@ class Entity {
     
     app.popMatrix();
   }
+  
+  Entity cloneEntity(int newId, String newName) {
+    Entity ne = new Entity(newId, newName, this.type);
+    ne.col = this.col;
+    ne.transform.position = this.transform.position.copy();
+    ne.transform.rotation = this.transform.rotation.copy();
+    ne.transform.scale = this.transform.scale.copy();
+    return ne;
+  }
 }
 
 class Transform {

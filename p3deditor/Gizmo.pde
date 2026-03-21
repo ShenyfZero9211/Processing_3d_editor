@@ -4,41 +4,58 @@ class Gizmo {
   int hoverAxis = 0;
   int mode = 1; // 1=Translate, 2=Rotate, 3=Scale, 4=Select
   
-  void render(PApplet app, Entity e) {
-    if (mode == 4) return; // Select mode = invisible
+  PVector getCenter(SceneManager scene) {
+    if (scene.selectedEntities.isEmpty()) return null;
+    if (scene.selectedEntities.size() == 1) return scene.selectedEntities.get(0).transform.position.copy();
+    
+    PVector center = new PVector();
+    for (Entity e : scene.selectedEntities) {
+      center.add(e.transform.position);
+    }
+    center.div(scene.selectedEntities.size());
+    return center;
+  }
+  
+  void render(PApplet app, SceneManager scene) {
+    if (mode == 4 || scene.selectedEntities.isEmpty()) return;
+    
+    PVector centerPos = getCenter(scene);
+    
+    // Force translate mode if multiple items selected
+    int drawMode = (scene.selectedEntities.size() > 1) ? 1 : mode;
     
     app.hint(PConstants.DISABLE_DEPTH_TEST);
     app.pushMatrix();
-    app.translate(e.transform.position.x, e.transform.position.y, e.transform.position.z);
+    app.translate(centerPos.x, centerPos.y, centerPos.z);
     
-    float dist = PVector.dist(editorCamera.pos, e.transform.position);
+    float dist = PVector.dist(editorCamera.pos, centerPos);
     float scaleFactor = max(0.01f, dist / 400.0f);
     app.scale(scaleFactor);
     
-    if (mode == 1 || mode == 3) {
+    if (drawMode == 1 || drawMode == 3) {
       app.noStroke();
       // X Axis (Red)
       if (hoverAxis == 1) app.fill(255, 255, 80); else app.fill(220, 50, 50);
-      app.pushMatrix(); app.rotateZ(-HALF_PI); drawAxis(app, mode); app.popMatrix();
+      app.pushMatrix(); app.rotateZ(-HALF_PI); drawAxis(app, drawMode); app.popMatrix();
       
       // Y Axis (Green)
       if (hoverAxis == 2) app.fill(255, 255, 80); else app.fill(50, 200, 50);
-      app.pushMatrix(); drawAxis(app, mode); app.popMatrix();
+      app.pushMatrix(); drawAxis(app, drawMode); app.popMatrix();
       
       // Z Axis (Blue)
       if (hoverAxis == 3) app.fill(255, 255, 80); else app.fill(60, 130, 240);
-      app.pushMatrix(); app.rotateX(HALF_PI); drawAxis(app, mode); app.popMatrix();
+      app.pushMatrix(); app.rotateX(HALF_PI); drawAxis(app, drawMode); app.popMatrix();
       
       // Center origin geometry
       if (hoverAxis > 0) app.fill(255, 255, 80); else app.fill(240);
-      if (mode == 1) {
+      if (drawMode == 1) {
         app.sphereDetail(12);
         app.sphere(baseThick * 1.5f);
       } else {
         app.box(baseThick * 2.5f);
       }
     } 
-    else if (mode == 2) {
+    else if (drawMode == 2) {
       app.noFill();
       float rSize = baseSize * 1.5f;
       
@@ -109,14 +126,16 @@ class Gizmo {
     app.endShape();
   }
 
-  int checkHit(Ray worldRay, Entity e, Raycaster rc) {
-    if (mode == 4) return 0;
+  int checkHit(Ray worldRay, SceneManager scene, Raycaster rc) {
+    if (mode == 4 || scene.selectedEntities.isEmpty()) return 0;
     
-    PVector pos = e.transform.position;
+    PVector pos = getCenter(scene);
     float dist = PVector.dist(editorCamera.pos, pos);
     float scaleFactor = max(0.01f, dist / 400.0f);
     
-    if (mode == 1 || mode == 3) {
+    int drawMode = (scene.selectedEntities.size() > 1) ? 1 : mode;
+    
+    if (drawMode == 1 || drawMode == 3) {
       float scaledSize = baseSize * scaleFactor;
       float scaledThick = baseThick * scaleFactor;
       float tolerance = scaledThick * 3.5f;
@@ -140,8 +159,7 @@ class Gizmo {
       if (tZ > 0 && tZ < minT) { minT = tZ; hit = 3; }
       return hit;
     } 
-    else if (mode == 2) {
-      // Rotation Rings check hit dynamically testing infinite 3D planar bounds natively against mathematically flat ring width!
+    else if (drawMode == 2) {
       float R = (baseSize * 1.5f * scaleFactor) / 2.0f;
       float tolerance = baseThick * scaleFactor * 3.5f;
       
