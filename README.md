@@ -1,5 +1,10 @@
 # Processing 3D Scene Editor
 
+> **A Native Processing 3D Editor Paradigm.**
+
+![Editor Screenshot 1](demo/2026-3-21%2017-3-30.jpg)
+![Editor Screenshot 2](demo/2026-3-21%2017-1-50.jpg)
+
 ## 引言
 本项目是一个基于 **Processing (Java P3D)** 创意编程框架搭建的**三维场景编辑器基本范式**。
 受行业标杆 Unreal Engine 5 (UE5) 和 Unity 的启发，本项目抛弃了简单的参数调控，纯手工从零构建了一套底层基于**纯数学与射线检测 (Raycasting)** 的高级交互式 3D 编辑系统。
