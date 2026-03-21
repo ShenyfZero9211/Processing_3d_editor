@@ -118,6 +118,7 @@ class SceneManager {
     }
     
     saveJSONObject(root, path);
+    if (p3deditor.this.ui != null) p3deditor.this.ui.debugConsole.addLog("Saved scene to " + path, 1);
     println("Saved scene to " + path);
   }
   
@@ -163,10 +164,12 @@ class SceneManager {
         }
       }
       
-      println("Loaded scene from " + file.getAbsolutePath());
-    } catch (Exception ex) {
-      println("Failed to load scene: " + ex.getMessage());
-      ex.printStackTrace();
+      if (p3deditor.this.ui != null) p3deditor.this.ui.debugConsole.addLog("Loaded scene: " + file.getName(), 1);
+      println("Loaded scene: " + file.getAbsolutePath());
+    } catch (Exception e) {
+      if (p3deditor.this.ui != null) p3deditor.this.ui.debugConsole.addLog("Error loading scene: " + e.getMessage(), 3);
+      System.err.println("Error loading scene: " + e.getMessage());
+      e.printStackTrace();
     }
   }
 }

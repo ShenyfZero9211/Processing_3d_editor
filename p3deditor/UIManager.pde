@@ -17,20 +17,37 @@ class UIManager {
   String activeEditString = "";
   
   ArrayList<HierarchyItemRect> hierarchyRects = new ArrayList<HierarchyItemRect>();
+  CommandInterpreter interpreter;
+  String consoleResult = "";
+  float menuBarHeight = 30;
+  String activeMenu = "";
+  boolean showConsole = true;
+  boolean showStats = true;
+  DebugConsole debugConsole;
   
   class HierarchyItemRect {
-    Entity entity;
-    float y;
+    Entity entity; float y;
     HierarchyItemRect(Entity e, float y) { this.entity = e; this.y = y; }
   }
-
-  UIManager(SceneManager scene) {
+  
+  UIManager(SceneManager scene, CommandInterpreter interpreter) {
     this.scene = scene;
+    this.interpreter = interpreter;
+    this.debugConsole = new DebugConsole(interpreter);
   }
   
   boolean isEditingText() { return activeEditTarget > 0; }
   
   void commitEdit() {
+    if (activeEditTarget == 14) {
+      debugConsole.addLog("> " + activeEditString, 0);
+      consoleResult = interpreter.execute(activeEditString);
+      if (consoleResult.startsWith("Error")) debugConsole.addLog(consoleResult, 3);
+      else debugConsole.addLog(consoleResult, 1);
+      activeEditTarget = 0;
+      return;
+    }
+    
     if (activeEditTarget == 0 || scene.selectedEntities.size() != 1) {
       activeEditTarget = 0;
       return;
@@ -82,10 +99,13 @@ class UIManager {
     } else if (keyCode == BACKSPACE || keyCode == DELETE) {
       if (activeEditString.length() > 0) activeEditString = activeEditString.substring(0, activeEditString.length() - 1);
     } else {
-      if (key == 0 || key == CODED) return;
-      // Allow hex characters for color editing
+      // Allow hex characters for color editing, AND spaces for console commands
       boolean isHexChar = (key >= 'a' && key <= 'f') || (key >= 'A' && key <= 'F');
-      if (activeEditTarget == 1 || activeEditTarget == 11 || (key >= '0' && key <= '9') || key == '.' || key == '-' || isHexChar) {
+      boolean isPrintable = (key >= 32 && key <= 126); 
+      
+      if (activeEditTarget == 14 && isPrintable) {
+        activeEditString += key;
+      } else if (activeEditTarget == 1 || activeEditTarget == 11 || (key >= '0' && key <= '9') || key == '.' || key == '-' || isHexChar) {
         activeEditString += key;
       }
     }
@@ -110,31 +130,56 @@ class UIManager {
 
   void render() {
     textAlign(LEFT, BASELINE);
-    fill(40, 40, 40, 230);
-    noStroke();
-    rect(0, 0, panelWidth, height);
-    
-    int listTopY = 50;
+    if (!showUI) return;
+    renderMenuBar();
+    renderHierarchy();
+    renderInspector();
+    if (showStats) {
+      renderStats();
+      renderViewportStatus();
+    }
+    if (showConsole) renderConsole();
+    if (!activeMenu.equals("")) renderMenuDropdown();
+    if (showContextMenu) renderContextMenu();
+    debugConsole.render(); // Debug console stays on top
+  }
+  
+  void renderHierarchy() {
+    int listTopY = floor(menuBarHeight + 50); 
     int listBottomY = height - 120;
+    
+    pushStyle();
+    fill(35, 35, 35, 230); // Glass effect alpha
+    noStroke();
+    rect(0, menuBarHeight, panelWidth, height - menuBarHeight);
+    
+    fill(25, 25, 25, 230); // Glass effect alpha
+    noStroke();
+    rect(0, menuBarHeight, panelWidth, 50);
+    fill(220); textSize(18);
+    textAlign(LEFT, CENTER);
+    text("Hierarchy", 15, menuBarHeight + 25);
+    stroke(80); line(10, menuBarHeight + 45, panelWidth - 10, menuBarHeight + 45);
+    
+    fill(40, 40, 40, 230); // Glass effect alpha
+    noStroke();
+    rect(0, listBottomY, panelWidth, height - listBottomY);
     
     hierarchyRects.clear();
     float currentY = listTopY + scrollY;
+    
+    pushMatrix();
+    // Clip the rendering to the hierarchy list area
+    clip(0, listTopY, panelWidth, listBottomY - listTopY); 
+    
     for (Entity e : scene.entities) {
       if (e.parent == null) {
         currentY = renderHierarchyNode(e, 0, currentY, listTopY, listBottomY);
       }
     }
     
-    fill(40, 40, 40);
-    noStroke();
-    rect(0, 0, panelWidth, listTopY);
-    fill(200); textSize(20);
-    text("Hierarchy", 15, 30);
-    stroke(100); line(10, 40, panelWidth - 10, 40);
-    
-    fill(40, 40, 40);
-    noStroke();
-    rect(0, listBottomY, panelWidth, height - listBottomY);
+    noClip();
+    popMatrix();
     
     if (hierarchyDragSource != null && hasDraggedHierarchy) {
       fill(255, 150); textSize(12);
@@ -148,35 +193,115 @@ class UIManager {
     }
     
     renderScrollbar(listTopY, listBottomY);
-    
-    // Buttons
-    fill(80, 150, 110); rect(15, height - 100, 105, 30, 5);
-    fill(180, 110, 80); rect(125, height - 100, 105, 30, 5);
-    fill(255); textSize(12);
-    text("Load Scene", 35, height - 80); text("Save Scene", 145, height - 80);
-    
-    fill(0, 150, 255);
-    rect(15, height - 60, 50, 30, 5); 
-    rect(70, height - 60, 50, 30, 5); 
-    rect(125, height - 60, 50, 30, 5);
-    rect(180, height - 60, 50, 30, 5); // +Light
-    fill(255);
-    text("+Cube", 21, height - 40); 
-    text("+Sph.", 80, height - 40); 
-    text("+Pln.", 135, height - 40);
-    text("+Lgt.", 191, height - 40);
-    
-    renderInspector();
-    renderStats();
-    if (showContextMenu) renderContextMenu();
+    popStyle();
   }
-
+  
+  void renderMenuBar() {
+    pushStyle();
+    fill(25, 25, 28);
+    noStroke();
+    rect(0, 0, width, menuBarHeight);
+    stroke(60); line(0, menuBarHeight-1, width, menuBarHeight-1);
+    
+    float x = 10;
+    String[] menus = {"File", "Edit", "Create", "Window"};
+    for (String m : menus) {
+      float w = textWidth(m) + 30;
+      boolean hover = mouseX > x && mouseX < x + w && mouseY < menuBarHeight;
+      
+      // Interaction Optimization: Switch menu if another is already open
+      if (!activeMenu.isEmpty() && !activeMenu.equals(m) && hover) {
+        activeMenu = m;
+      }
+      
+      if (hover || activeMenu.equals(m)) {
+        fill(60, 60, 70);
+        rect(x, 2, w, menuBarHeight - 4, 4);
+      }
+      fill(220); textAlign(CENTER, CENTER); textSize(13);
+      text(m, x + w / 2, menuBarHeight / 2);
+      x += w;
+    }
+    popStyle();
+  }
+  
+  void renderMenuDropdown() {
+    String[] items = {};
+    if (activeMenu.equals("File")) items = new String[]{"New Scene", "Load Scene", "Save Scene", "Export"};
+    else if (activeMenu.equals("Edit")) items = new String[]{"Undo  [Ctrl+Z]", "Redo  [Ctrl+Y]", "Delete [Del]"};
+    else if (activeMenu.equals("Create")) items = new String[]{"Cube", "Sphere", "Plane", "Point Light"};
+    else if (activeMenu.equals("Window")) items = new String[]{"Toggle Console", "Toggle Stats", "Reset Camera"};
+    
+    if (items.length == 0) { activeMenu = ""; return; }
+    
+    float x = 10;
+    String[] menus = {"File", "Edit", "Create", "Window"};
+    for (String m : menus) {
+      if (m.equals(activeMenu)) break;
+      x += textWidth(m) + 30;
+    }
+    
+    pushStyle();
+    float w = 150;
+    float h = items.length * 28 + 10;
+    fill(35, 35, 40, 250); stroke(80);
+    rect(x, menuBarHeight, w, h, 4);
+    
+    for (int i = 0; i < items.length; i++) {
+      float iy = menuBarHeight + 5 + i * 28;
+      boolean hover = mouseX > x && mouseX < x + w && mouseY > iy && mouseY < iy + 28;
+      boolean enabled = isMenuActionEnabled(activeMenu, items[i]);
+      
+      if (hover && enabled) {
+        fill(60, 80, 150); noStroke();
+        rect(x + 2, iy, w - 4, 28, 4);
+      }
+      
+      fill(enabled ? 230 : 100); 
+      textAlign(LEFT, CENTER); textSize(12);
+      text(items[i], x + 15, iy + 14);
+    }
+    popStyle();
+  }
+  
+  void renderConsole() {
+    pushStyle();
+    // Background bar
+    fill(20, 20, 25, 220);
+    noStroke();
+    rect(0, height - 30, width, 30);
+    stroke(60); line(0, height-30, width, height-30); // Top border
+    
+    // Command Prompt
+    fill(100, 255, 100);
+    textAlign(LEFT, CENTER);
+    textSize(14);
+    text("> ", 15, height - 15);
+    
+    // Current Input
+    if (activeEditTarget == 14) {
+      fill(255, 255, 0);
+      text(activeEditString + (frameCount % 60 < 30 ? "_" : ""), 35, height - 15);
+    } else {
+      fill(120);
+      text("Type a command (e.g. 'move Cube 10 0 0') or press 'Enter'...", 35, height - 15);
+    }
+    
+    // Last Result
+    if (consoleResult != null && !consoleResult.isEmpty()) {
+       textAlign(RIGHT, CENTER);
+       fill(consoleResult.startsWith("Error") ? color(255, 100, 100) : color(150, 200, 255));
+       text(consoleResult, width - 20, height - 15);
+    }
+    popStyle();
+  }
+  
   void renderStats() {
     int totalPolys = 0;
     for (Entity e : scene.entities) totalPolys += e.getPolyCount();
     
     float x = 270;
-    float y = 100;
+    float y = 45 + menuBarHeight;
     textAlign(LEFT, TOP);
     textSize(12);
     
@@ -221,13 +346,21 @@ class UIManager {
       }
       
       fill(255);
+      textSize(13);
       float indent = 20 + depth * 20;
       if (depth > 0) {
-        stroke(80);
+        stroke(100);
         line(indent - 10, y + itemH/2, indent - 10, y - itemH/2 + 5); 
         line(indent - 10, y + itemH/2, indent - 5, y + itemH/2);
       }
-      noStroke(); text(e.name, indent, y + 20);
+      noStroke();
+      textAlign(LEFT, CENTER);
+      
+      float maxWidth = panelWidth - indent - 15;
+      String displayName = truncateString(e.name, maxWidth);
+      
+      // Draw truncated text perfectly centered
+      text(displayName, indent, y + itemH/2 - 2);
     }
     float nextY = y + itemH;
     for (Entity child : e.children) {
@@ -305,6 +438,46 @@ class UIManager {
   }
   
   boolean handleMousePressed() {
+    if (!showUI) return false;
+    
+    // 0. Menu Bar Selection
+    if (mouseY < menuBarHeight) {
+      float x = 10;
+      String[] menus = {"File", "Edit", "Create", "Window"};
+      for (String m : menus) {
+        float w = textWidth(m) + 30;
+        if (mouseX > x && mouseX < x + w) {
+          if (activeMenu.equals(m)) activeMenu = "";
+          else activeMenu = m;
+          return true;
+        }
+        x += w;
+      }
+      activeMenu = "";
+      return true;
+    }
+    
+    // 1. Dropdown Item Click
+    if (!activeMenu.equals("")) {
+      float dropX = 10;
+      String[] mainMenus = {"File", "Edit", "Create", "Window"};
+      for (String m : mainMenus) {
+        if (m.equals(activeMenu)) break;
+        dropX += textWidth(m) + 30;
+      }
+      
+      String[] items = getItemsForMenu(activeMenu);
+      float dropW = 150;
+      for (int i = 0; i < items.length; i++) {
+        float iy = menuBarHeight + 5 + i * 28;
+        if (mouseX > dropX && mouseX < dropX + dropW && mouseY > iy && mouseY < iy + 28) {
+          executeMenuAction(activeMenu, items[i]);
+          activeMenu = ""; return true;
+        }
+      }
+      activeMenu = ""; return true;
+    }
+    
     float pX = width - panelWidth;
     if (showContextMenu) {
       if (mouseX > menuX && mouseX < menuX + 120 && mouseY > menuY && mouseY < menuY + 100) {
@@ -319,6 +492,11 @@ class UIManager {
         showContextMenu = false; return true;
       }
       showContextMenu = false;
+    }
+    
+    if (showUI && showConsole && mouseY > height - 30) {
+      activeEditTarget = 14; activeEditString = ""; 
+      return true; 
     }
     
     if (mouseX < panelWidth || mouseX > pX) {
@@ -357,7 +535,8 @@ class UIManager {
         // 2. Hierarchy Items
         if (mouseY >= listTopY && mouseY <= listBottomY) {
           for (HierarchyItemRect hr : hierarchyRects) {
-            if (mouseY > hr.y && mouseY < hr.y + 30) {
+            // Allow hit-test even if partially clipped, as long as it's within the mouse range
+            if (mouseY >= hr.y && mouseY <= hr.y + 30) {
               scene.selectEntity(hr.entity, isCtrlDown);
               hierarchyDragSource = hr.entity; 
               hierarchyDragStartX = mouseX; hierarchyDragStartY = mouseY; hasDraggedHierarchy = false;
@@ -365,18 +544,6 @@ class UIManager {
             }
           }
           return true; 
-        }
-        
-        if (mouseY > height - 100 && mouseY < height - 70) {
-          if (mouseX > 15 && mouseX < 120) { selectInput("Load:", "fileSelectedForLoad"); return true; }
-          else if (mouseX > 125 && mouseX < 230) { selectOutput("Save:", "fileSelectedForSave"); return true; }
-        }
-        if (mouseY > height - 60 && mouseY < height - 30) {
-          if (mouseX > 15 && mouseX < 65) scene.addEntity("Cube", "Cube");
-          else if (mouseX > 70 && mouseX < 120) scene.addEntity("Sphere", "Sphere");
-          else if (mouseX > 125 && mouseX < 175) scene.addEntity("Plane", "Plane");
-          else if (mouseX > 180 && mouseX < 230) scene.addEntity("Light", "PointLight");
-          return true;
         }
         return true;
       }
@@ -448,6 +615,7 @@ class UIManager {
   void deleteSelection() {
     if (scene.selectedEntities.isEmpty()) return;
     scene.undoManager.push(new DeleteEntityCommand(scene, scene.selectedEntities));
+    debugConsole.addLog("Deleted " + scene.selectedEntities.size() + " entities", 0);
     for (Entity e : new ArrayList<Entity>(scene.selectedEntities)) {
       if (e.parent != null) e.parent.children.remove(e);
       scene.entities.remove(e);
@@ -492,5 +660,111 @@ class UIManager {
     return false;
   }
   
-  void handleKeyPressed() { if (key == BACKSPACE || key == DELETE) deleteSelection(); }
+
+
+  void drawButton(String label, float x, float y, float w, float h, color base) {
+    pushStyle();
+    boolean hover = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h;
+    fill(hover ? lerpColor(base, color(255), 0.2f) : base);
+    noStroke();
+    rect(x, y, w, h, 5);
+    fill(255);
+    textAlign(CENTER, CENTER);
+    textSize(12);
+    text(label, x + w/2, y + h/2);
+    popStyle();
+  }
+  
+  String[] getItemsForMenu(String menu) {
+    if (menu.equals("File")) return new String[]{"New Scene", "Load Scene", "Save Scene"};
+    else if (menu.equals("Edit")) return new String[]{"Undo  [Ctrl+Z]", "Redo  [Ctrl+Y]", "Delete [Del]"};
+    else if (menu.equals("Create")) return new String[]{"Cube", "Sphere", "Plane", "Point Light"};
+    else if (menu.equals("Window")) return new String[]{"Toggle Console", "Toggle Stats", "Reset Camera"};
+    return new String[]{};
+  }
+  
+  boolean isMenuActionEnabled(String menu, String item) {
+    if (menu.equals("Edit")) {
+      if (item.contains("Undo")) return !scene.undoManager.undoStack.isEmpty();
+      if (item.contains("Redo")) return !scene.undoManager.redoStack.isEmpty();
+      if (item.contains("Delete")) return !scene.selectedEntities.isEmpty();
+    }
+    return true;
+  }
+
+  void executeMenuAction(String menu, String item) {
+    if (!isMenuActionEnabled(menu, item)) return;
+    
+    if (item.contains("New Scene")) {
+      scene.entities.clear(); scene.clearSelection();
+    } else if (item.contains("Load Scene")) {
+      selectInput("Load Scene:", "fileSelectedForLoad");
+    } else if (item.contains("Save Scene")) {
+      selectOutput("Save Scene:", "fileSelectedForSave");
+    } else if (item.contains("Export")) {
+       saveFrame("exports/screenshot-####.png");
+       consoleResult = "SUCCESS: Exported screenshot";
+    } else if (item.contains("Undo")) {
+      scene.undoManager.undo();
+    } else if (item.contains("Redo")) {
+      scene.undoManager.redo();
+    } else if (item.contains("Delete")) {
+      deleteSelection();
+    } else if (item.equals("Cube")) {
+      scene.addEntity("Cube", "Cube");
+      debugConsole.addLog("Created Cube", 0);
+    } else if (item.equals("Sphere")) {
+      scene.addEntity("Sphere", "Sphere");
+      debugConsole.addLog("Created Sphere", 0);
+    } else if (item.equals("Plane")) {
+      scene.addEntity("Plane", "Plane");
+      debugConsole.addLog("Created Plane", 0);
+    } else if (item.equals("Point Light")) {
+      scene.addEntity("Point Light", "PointLight");
+      debugConsole.addLog("Created PointLight", 0);
+    } else if (item.contains("Console")) {
+      showConsole = !showConsole;
+      if (!showConsole && activeEditTarget == 14) activeEditTarget = 0;
+    } else if (item.contains("Stats")) {
+      showStats = !showStats;
+    } else if (item.contains("Reset Camera")) {
+      editorCamera.reset();
+    }
+  }
+  
+  String truncateString(String s, float maxWidth) {
+    if (textWidth(s) <= maxWidth) return s;
+    String res = s;
+    while (res.length() > 0 && textWidth(res + "...") > maxWidth) {
+      res = res.substring(0, res.length() - 1);
+    }
+    return res + "...";
+  }
+  
+  void handleKeyPressed() {
+    debugConsole.handleKey(key, keyCode);
+    
+    // Fallback: If console is not active and not editing inspector, allow shortcuts like Delete
+    if (!debugConsole.active && !isEditingText()) {
+      if (key == BACKSPACE || keyCode == DELETE) deleteSelection();
+    }
+  }
+  
+  void handleMouseWheel(float e) {
+    debugConsole.handleMouseWheel(e);
+  }
+  
+  void renderViewportStatus() {
+    pushStyle();
+    fill(255);
+    textSize(14);
+    textAlign(LEFT, TOP);
+    String modeText = "Tool [" + scene.gizmo.mode + "]: ";
+    if (scene.gizmo.mode == 1) modeText += "Translate";
+    if (scene.gizmo.mode == 2) modeText += "Rotate";
+    if (scene.gizmo.mode == 3) modeText += "Scale";
+    if (scene.gizmo.mode == 4) modeText += "Select";
+    text(modeText + "  |  Snap: " + (p3deditor.this.snapToGrid ? "ON [G]" : "OFF [G]") + "  |  UI: H/TAB", 270, 15 + menuBarHeight);
+    popStyle();
+  }
 }

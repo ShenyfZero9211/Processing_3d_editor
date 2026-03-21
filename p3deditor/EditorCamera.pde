@@ -15,6 +15,15 @@ class EditorCamera {
     updatePosFromTarget();
   }
   
+  void reset() {
+    pos.set(0, -100, 400); 
+    target.set(0, 0, 0);
+    orbitDistance = 400;
+    rotX = -PI/6;
+    rotY = PI/4;
+    updatePosFromTarget();
+  }
+  
   // Mathematical derivation of View space basis vectors mapped to World space
   PVector getForward() { 
     return new PVector(cos(rotX)*sin(rotY), -sin(rotX), -cos(rotX)*cos(rotY)); 

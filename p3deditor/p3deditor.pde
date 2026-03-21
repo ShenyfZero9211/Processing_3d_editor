@@ -8,6 +8,7 @@ SceneManager scene;
 EditorCamera editorCamera;
 UIManager ui;
 Raycaster raycaster;
+CommandInterpreter interpreter;
 Robot robot;
 
 int draggingAxis = 0; // 0=none, 1=X, 2=Y, 3=Z
@@ -58,8 +59,9 @@ void setup() {
   
   pickerBuffer = createGraphics(1280, 720, P3D);
   scene = new SceneManager();
+  interpreter = new CommandInterpreter(scene);
   editorCamera = new EditorCamera();
-  ui = new UIManager(scene);
+  ui = new UIManager(scene, interpreter);
   raycaster = new Raycaster();
   
   scene.addEntity("Cube 1", "Cube");
@@ -136,18 +138,7 @@ void draw() {
     ui.render();
   }
   
-  // Render Mode Text Overlay
-  if (showUI) {
-    fill(255);
-    textSize(14);
-    textAlign(LEFT, TOP);
-    String modeText = "Tool [" + scene.gizmo.mode + "]: ";
-    if (scene.gizmo.mode == 1) modeText += "Translate";
-    if (scene.gizmo.mode == 2) modeText += "Rotate";
-    if (scene.gizmo.mode == 3) modeText += "Scale";
-    if (scene.gizmo.mode == 4) modeText += "Select";
-    text(modeText + "  |  Snap: " + (snapToGrid ? "ON [G]" : "OFF [G]") + "  |  UI: H/TAB", 270, 70);
-  }
+
   
   // Box Select GUI Screen Overlay
   if (isBoxSelecting) {
@@ -499,6 +490,10 @@ void mouseReleased() {
 }
 
 void mouseWheel(MouseEvent event) {
+  if (showUI && ui.debugConsole.active) {
+    ui.handleMouseWheel(event.getCount());
+    return;
+  }
   if (showUI && mouseX < 250) {
     ui.scrollY += event.getCount() * -20;
     ui.scrollY = min(0, ui.scrollY); // lock top
@@ -512,9 +507,17 @@ void mouseWheel(MouseEvent event) {
 }
 
 void keyPressed() {
+  // 1. Debug Console has absolute priority
+  if (ui.debugConsole.active) {
+    ui.handleKeyPressed();
+    if (key == ESC) key = 0;
+    return;
+  }
+  
+  // 2. Inspector Text Editing
   if (ui.isEditingText()) {
     ui.handleTextEditKey();
-    if (key == ESC) key = 0; // Extremely important: prevents processing from hard-crashing sketch on ECS exit
+    if (key == ESC) key = 0;
     return;
   }
   
