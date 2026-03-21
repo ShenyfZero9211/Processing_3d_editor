@@ -52,7 +52,18 @@ class DebugConsole {
   }
   
   void addLog(String msg, int type) {
-    logs.add(new LogEntry(msg, type));
+    if (msg == null) return;
+    
+    // Split multi-line messages (like the alias list) into separate entries for clean rendering
+    if (msg.contains("\n")) {
+      String[] lines = msg.split("\n");
+      for (String l : lines) {
+        if (!l.trim().isEmpty()) logs.add(new LogEntry(l, type));
+      }
+    } else {
+      logs.add(new LogEntry(msg, type));
+    }
+
     if (logWriter != null) {
       String prefix = "[INFO] ";
       if (type == 1) prefix = "[SUCCESS] ";
@@ -67,8 +78,8 @@ class DebugConsole {
     if (!active) return;
     
     p3deditor.this.pushStyle();
-    // 1. Semi-transparent overlay (top half)
-    p3deditor.this.fill(20, 20, 25, 235);
+    // 1. Semi-transparent glass overlay (top half)
+    p3deditor.this.fill(20, 20, 25, 230);
     p3deditor.this.noStroke();
     p3deditor.this.rect(0, 0, p3deditor.this.width, p3deditor.this.height/2);
     p3deditor.this.stroke(100);

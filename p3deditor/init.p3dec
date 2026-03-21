@@ -1,0 +1,20 @@
+# P3DE v0.3.0 Initialization Script
+# Use '#' or '//' for comments
+
+# 1. Register Custom Aliases (Shortcuts)
+# Format: alias <shorthand> <full_command>
+alias redcube "create Cube; color Cube #FF0000"
+alias greencube "create Cube; color Cube #00FF00"
+alias bluecube "create Cube; color Cube #0000FF"
+alias sunlight "create PointLight; tp PointLight 0 -500 0; color PointLight #FFFFFF"
+
+# 2. Global Scene Environment Toggles
+# You can uncomment these to auto-toggle UI or Stats on startup
+# help
+# tp Cube 0 0 0
+
+# 3. Restoration
+reset camera
+
+# Log success
+# The terminal will show the execution count automatically

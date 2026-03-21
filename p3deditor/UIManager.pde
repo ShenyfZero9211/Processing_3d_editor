@@ -34,6 +34,9 @@ class UIManager {
     this.scene = scene;
     this.interpreter = interpreter;
     this.debugConsole = new DebugConsole(interpreter);
+    
+    // Auto-run startup script if it exists
+    interpreter.execute("exec init.p3dec");
   }
   
   boolean isEditingText() { return activeEditTarget > 0; }
@@ -131,17 +134,37 @@ class UIManager {
   void render() {
     textAlign(LEFT, BASELINE);
     if (!showUI) return;
-    renderMenuBar();
-    renderHierarchy();
-    renderInspector();
-    if (showStats) {
-      renderStats();
-      renderViewportStatus();
+    
+    // 1. Conditionally render background UI elements
+    if (debugConsole.active) {
+      // If terminal is open, hide the top Menu Bar to prevent bleed-through line artifacts
+      // and clip the sidebars to only show in the bottom half of the screen
+      pushStyle();
+      p3deditor.this.clip(0, p3deditor.this.height/2, width, height/2);
+      renderHierarchy();
+      renderInspector();
+      p3deditor.this.noClip();
+      popStyle();
+    } else {
+      renderMenuBar();
+      renderHierarchy();
+      renderInspector();
     }
-    if (showConsole) renderConsole();
+    
+    // 2. Overlays (Suppress top-half overlays when terminal is active to prevent artifacts)
+    if (!debugConsole.active) {
+      if (showStats) {
+        renderStats();
+        renderViewportStatus();
+      }
+      if (showConsole) renderConsole();
+    }
+    
     if (!activeMenu.equals("")) renderMenuDropdown();
     if (showContextMenu) renderContextMenu();
-    debugConsole.render(); // Debug console stays on top
+    
+    // 3. Absolute Top Layer
+    debugConsole.render(); 
   }
   
   void renderHierarchy() {

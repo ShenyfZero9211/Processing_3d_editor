@@ -134,9 +134,7 @@ void draw() {
   hint(DISABLE_DEPTH_TEST);
   noLights(); // Prevents 3D scene lighting from tinting the 2D text!
   
-  if (showUI) {
-    ui.render();
-  }
+
   
 
   
@@ -158,6 +156,11 @@ void draw() {
     text(debugText, 270, 30);
   }
   
+  // Final UI Layer (Must be last to cover all overlays)
+  if (showUI) {
+    ui.render();
+  }
+  
   hint(ENABLE_DEPTH_TEST);
 }
 
@@ -172,6 +175,8 @@ void drawGrid() {
 
 // Global input routing to UI or Camera
 void mousePressed() {
+  if (ui.debugConsole.active) return;
+  
   if (showUI) {
     if (ui.isEditingText()) ui.commitEdit(); 
     if (ui.handleMousePressed()) return; 
@@ -283,6 +288,7 @@ void setupDrag() {
 }
 
 void mouseDragged() {
+  if (ui.debugConsole.active) return;
   if (showUI) ui.handleMouseDragged();
   
   if (ui.isDraggingScrollbar) {
@@ -442,6 +448,7 @@ PVector worldToScreen(PVector w) {
 }
 
 void mouseReleased() {
+  if (ui.debugConsole.active) return;
   if (showUI) ui.handleMouseReleased();
   
   if (ui.isDraggingScrollbar) {
@@ -494,6 +501,8 @@ void mouseWheel(MouseEvent event) {
     ui.handleMouseWheel(event.getCount());
     return;
   }
+  if (ui.debugConsole.active) return;
+  
   if (showUI && mouseX < 250) {
     ui.scrollY += event.getCount() * -20;
     ui.scrollY = min(0, ui.scrollY); // lock top
