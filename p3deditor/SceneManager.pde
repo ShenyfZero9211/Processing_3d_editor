@@ -3,11 +3,19 @@ class SceneManager {
   ArrayList<Entity> selectedEntities = new ArrayList<Entity>();
   Gizmo gizmo = new Gizmo();
   int nextEntityId = 1;
+  UndoManager undoManager = new UndoManager();
+  boolean useLocalSpace = false; // Default to World as requested
+  
+  Entity findEntityById(int id) {
+    for (Entity e : entities) if (e.id == id) return e;
+    return null;
+  }
   
   void addEntity(String name, String type) {
     Entity e = new Entity(nextEntityId++, name, type);
     entities.add(e);
     selectEntity(e, false);
+    undoManager.push(new AddEntityCommand(this, e));
   }
   
   void addEntityToSceneRecursive(Entity e) {
@@ -19,12 +27,13 @@ class SceneManager {
   }
   
   void render(PApplet app) {
-    // Advanced 3-point Studio Lighting
-    app.ambientLight(60, 60, 60);
-    app.directionalLight(240, 230, 220, -0.5f, 0.8f, -0.5f); // Key Light (Warm Sun)
-    app.directionalLight(60, 80, 120, 0.5f, -0.2f, 0.5f);   // Fill Light (Cool Sky)
-    app.directionalLight(80, 80, 90, 0.0f, 0.0f, -1.0f);    // Rim Light (Backlight)
-    app.lightSpecular(200, 200, 200);
+    // Global Base Illumination
+    app.ambientLight(50, 50, 50);
+    app.lightSpecular(180, 180, 180);
+    
+    // Note: The main lighting is now handled in p3deditor.draw() via PointLight entities.
+    // We keep a very weak fill here just to prevent total blackness on backfaces.
+    app.directionalLight(40, 45, 50, 0.5f, -0.2f, 0.5f); 
     
     // ONLY start rendering from root entities (hierarchical recursion handles children)
     for(Entity e : entities) {

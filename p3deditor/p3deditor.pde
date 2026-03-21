@@ -23,6 +23,9 @@ PVector startDragPlaneHit = null;
 PMatrix3D savedProj = new PMatrix3D();
 PMatrix3D savedView = new PMatrix3D();
 
+// Undo/Redo Snapshots
+PVector[] oldStatesP, oldStatesR, oldStatesS;
+
 boolean[] keyStates = new boolean[256];
 boolean isAltDown = false;
 boolean isCtrlDown = false;
@@ -61,6 +64,8 @@ void setup() {
   
   scene.addEntity("Cube 1", "Cube");
   scene.addEntity("Sphere 1", "Sphere");
+  scene.addEntity("Light 1", "PointLight");
+  scene.entities.get(2).transform.position.set(150, -200, 100);
 }
 
 void draw() {
@@ -70,6 +75,23 @@ void draw() {
   
   // Apply camera
   editorCamera.apply(this);
+  
+  // Dynamic Scene Lighting
+  ambientLight(70, 70, 70);
+  lightSpecular(200, 200, 200);
+  for (Entity e : scene.entities) {
+    if (e.type.equals("PointLight")) {
+      PVector p = e.getWorldPosition();
+      float r = red(e.col) * e.lightIntensity;
+      float g = green(e.col) * e.lightIntensity;
+      float b = blue(e.col) * e.lightIntensity;
+      
+      // factor = 1 / (1 + linear*d + quadratic*d^2)
+      // We use quadratic falloff to map lightRange to a 50% drop at the range distance
+      lightFalloff(1.0, 0.0, 1.0 / sq(e.lightRange)); 
+      pointLight(r, g, b, p.x, p.y, p.z);
+    }
+  }
   
   // VERY IMPORTANT: Save the matrices before drawing the UI
   savedProj.set(((PGraphics3D)g).projection);
@@ -255,6 +277,17 @@ void setupDrag() {
         }
       }
     }
+    // Capture snapshots for Undo
+    int count = scene.selectedEntities.size();
+    oldStatesP = new PVector[count];
+    oldStatesR = new PVector[count];
+    oldStatesS = new PVector[count];
+    for (int i=0; i<count; i++) {
+      Entity e = scene.selectedEntities.get(i);
+      oldStatesP[i] = e.transform.position.copy();
+      oldStatesR[i] = e.transform.rotation.copy();
+      oldStatesS[i] = e.transform.scale.copy();
+    }
   }
 }
 
@@ -288,6 +321,18 @@ void mouseDragged() {
       if (draggingAxis == 2) axisW.y = 1;
       if (draggingAxis == 3) axisW.z = 1;
       
+      // Convert Local Axis to World Space if using Local Mode
+      if (scene.useLocalSpace && scene.selectedEntities.size() == 1) {
+         Entity e = scene.selectedEntities.get(0);
+         PMatrix3D wm = e.getWorldMatrix();
+         // Multiply matrix by the local axis (as a direction vector, w=0)
+         PVector worldAxis = new PVector();
+         wm.mult(axisW, worldAxis);
+         // The world axis length will be scaled by the entity's scale, 
+         // so we normalize to get just the direction.
+         axisW = worldAxis.normalize();
+      }
+      
       PVector p0 = startDragCenter;
       PVector p1 = PVector.add(p0, PVector.mult(axisW, 100.0f)); 
       
@@ -303,38 +348,36 @@ void mouseDragged() {
         float worldDelta = k * 100.0f;
         
         if (drawMode == 1) { // Translate
-          float snapDelta = worldDelta;
-          if (snapToGrid) {
-            float baseAnchor = 0;
-            if (draggingAxis == 1) baseAnchor = startDragCenter.x;
-            if (draggingAxis == 2) baseAnchor = startDragCenter.y;
-            if (draggingAxis == 3) baseAnchor = startDragCenter.z;
-            
-            float targetVal = round((baseAnchor + worldDelta) / 10.0f) * 10.0f;
-            snapDelta = targetVal - baseAnchor; 
-          }
+          float delta = snapToGrid ? (round(worldDelta / 10.0f) * 10.0f) : worldDelta;
           
           for (int i=0; i<scene.selectedEntities.size(); i++) {
             Entity e = scene.selectedEntities.get(i);
             PVector startP = startDragPositions.get(i);
-            if (draggingAxis == 1) e.transform.position.x = startP.x + snapDelta;
-            if (draggingAxis == 2) e.transform.position.y = startP.y + snapDelta;
-            if (draggingAxis == 3) e.transform.position.z = startP.z + snapDelta;
+            
+            if (scene.useLocalSpace && scene.selectedEntities.size() == 1) {
+              if (draggingAxis == 1) e.transform.position.x = startP.x + delta;
+              if (draggingAxis == 2) e.transform.position.y = startP.y + delta;
+              if (draggingAxis == 3) e.transform.position.z = startP.z + delta;
+            } else {
+              e.transform.position.set(PVector.add(startP, PVector.mult(axisW, delta)));
+            }
           }
         }
         else if (drawMode == 3 && scene.selectedEntities.size() == 1) { // Scale
-          float sDelta = worldDelta / 100.0f; 
-          float val = 0;
-          if (draggingAxis == 1) val = startDragScale.x + sDelta;
-          if (draggingAxis == 2) val = startDragScale.y + sDelta;
-          if (draggingAxis == 3) val = startDragScale.z + sDelta;
-          
-          if (snapToGrid) val = round(val / 0.5f) * 0.5f;
+          float sDelta = worldDelta / 100.0f;
+          if (snapToGrid) sDelta = round(sDelta / 0.1f) * 0.1f;
           
           Entity e = scene.selectedEntities.get(0);
-          if (draggingAxis == 1) e.transform.scale.x = val;
-          if (draggingAxis == 2) e.transform.scale.y = val;
-          if (draggingAxis == 3) e.transform.scale.z = val;
+          if (scene.useLocalSpace) {
+            if (draggingAxis == 1) e.transform.scale.x = max(0.01f, startDragScale.x + sDelta);
+            if (draggingAxis == 2) e.transform.scale.y = max(0.01f, startDragScale.y + sDelta);
+            if (draggingAxis == 3) e.transform.scale.z = max(0.01f, startDragScale.z + sDelta);
+          } else {
+            e.transform.scale.set(PVector.add(startDragScale, PVector.mult(axisW, sDelta)));
+            e.transform.scale.x = max(0.01f, e.transform.scale.x);
+            e.transform.scale.y = max(0.01f, e.transform.scale.y);
+            e.transform.scale.z = max(0.01f, e.transform.scale.z);
+          }
         }
       }
     }
@@ -353,21 +396,31 @@ void mouseDragged() {
         
         float angle = acos(constrain(vStart.dot(vCur), -1.0f, 1.0f));
         PVector cross = vStart.cross(vCur);
-        if (cross.dot(normal) < 0) {
-          angle = -angle; // Determine rotation direction around normal
-        }
+        if (cross.dot(normal) < 0) angle = -angle; 
         
-        float val = 0;
-        if (draggingAxis == 1) val = startDragRot.x + angle;
-        if (draggingAxis == 2) val = startDragRot.y + angle;
-        if (draggingAxis == 3) val = startDragRot.z + angle;
-        
-        if (snapToGrid) val = round(val / radians(15)) * radians(15);
+        if (snapToGrid) angle = round(angle / radians(15)) * radians(15);
         
         Entity e = scene.selectedEntities.get(0);
-        if (draggingAxis == 1) e.transform.rotation.x = val;
-        if (draggingAxis == 2) e.transform.rotation.y = val;
-        if (draggingAxis == 3) e.transform.rotation.z = val;
+        PMatrix3D m = new PMatrix3D();
+        m.rotateY(startDragRot.y);
+        m.rotateX(startDragRot.x);
+        m.rotateZ(startDragRot.z);
+
+        if (scene.useLocalSpace) {
+          // Local rotation: M_new = M_old * R_local_delta
+          if (draggingAxis == 1) m.rotateX(angle);
+          if (draggingAxis == 2) m.rotateY(angle);
+          if (draggingAxis == 3) m.rotateZ(angle);
+        } else {
+          // World rotation: M_new = R_world_delta * M_old
+          PMatrix3D rDelta = new PMatrix3D();
+          if (draggingAxis == 1) rDelta.rotateX(angle);
+          if (draggingAxis == 2) rDelta.rotateY(angle);
+          if (draggingAxis == 3) rDelta.rotateZ(angle);
+          m.preApply(rDelta);
+        }
+        
+        e.updateRotationFromMatrix(m);
       }
     }
     return;
@@ -402,6 +455,24 @@ void mouseReleased() {
   
   if (ui.isDraggingScrollbar) {
     ui.isDraggingScrollbar = false;
+  }
+
+  if (draggingAxis > 0 && !scene.selectedEntities.isEmpty()) {
+    int count = scene.selectedEntities.size();
+    PVector[] nP = new PVector[count];
+    PVector[] nR = new PVector[count];
+    PVector[] nS = new PVector[count];
+    boolean changed = false;
+    for (int i=0; i<count; i++) {
+      Entity e = scene.selectedEntities.get(i);
+      nP[i] = e.transform.position.copy();
+      nR[i] = e.transform.rotation.copy();
+      nS[i] = e.transform.scale.copy();
+      if (nP[i].dist(oldStatesP[i]) > 0.001f || nR[i].dist(oldStatesR[i]) > 0.001f || nS[i].dist(oldStatesS[i]) > 0.001f) changed = true;
+    }
+    if (changed) {
+      scene.undoManager.push(new TransformCommand(scene, scene.selectedEntities, oldStatesP, nP, oldStatesR, nR, oldStatesS, nS));
+    }
   }
 
   draggingAxis = 0;
@@ -447,19 +518,30 @@ void keyPressed() {
     return;
   }
   
-  if (keyCode == ALT) isAltDown = true;
-  if (keyCode == CONTROL || keyCode == 157 || keyCode == 91) isCtrlDown = true;
+  // Global Shortcuts (not in text edit mode)
+  if (keyCode == ALT) { isAltDown = true; println("Alt Down"); }
+  if (keyCode == SHIFT) { keyStates[SHIFT] = true; println("Shift Down"); }
+  if (keyCode == CONTROL || keyCode == 157 || keyCode == 91 || (key != CODED && key == 17)) { 
+     isCtrlDown = true; 
+     println("Control Down"); 
+  }
   if (keyCode < 256) keyStates[keyCode] = true;
   
   // Transform Modes
-  if (key == '1') scene.gizmo.mode = 1;
-  if (key == '2') scene.gizmo.mode = 2;
-  if (key == '3') scene.gizmo.mode = 3;
-  if (key == '4') scene.gizmo.mode = 4;
+  if (key == '1') { scene.gizmo.mode = 1; println("Mode: Translate"); }
+  if (key == '2') { scene.gizmo.mode = 2; println("Mode: Rotate"); }
+  if (key == '3') { scene.gizmo.mode = 3; println("Mode: Scale"); }
+  if (key == '4') { scene.gizmo.mode = 4; println("Mode: Select"); }
   
   // Snapping Toggle
   if (key == 'g' || key == 'G') {
     snapToGrid = !snapToGrid;
+  }
+  
+  // Coordinate Space Toggle
+  if (key == 'l' || key == 'L') {
+    scene.useLocalSpace = !scene.useLocalSpace;
+    println("Coordinate Space: " + (scene.useLocalSpace ? "LOCAL" : "WORLD"));
   }
   
   // UI Visibility Toggle
@@ -468,30 +550,26 @@ void keyPressed() {
   }
   
   if (isCtrlDown) {
+    // Determine Undo/Redo correctly
+    boolean isZ = (keyCode == 'Z' || (int)key == 26 || (int)key == 122); // 'z' is 122, SUB is 26
+    boolean isY = (keyCode == 'Y' || (int)key == 25 || (int)key == 121);
+    
+    if (isZ && !keyStates[SHIFT]) {
+       scene.undoManager.undo();
+       debugText = "Action Undone";
+       println("Undo Triggered");
+    } else if ((isZ && keyStates[SHIFT]) || isY) {
+       scene.undoManager.redo();
+       debugText = "Action Redone";
+       println("Redo Triggered");
+    }
+    
     // Note: Java/Processing captures CTRL+C as ASCII(3) and CTRL+V as ASCII(22) instead of the literal characters
     if (keyCode == 67 || key == 'c' || key == 'C' || key == 3) {
-      if (!scene.selectedEntities.isEmpty()) {
-        clipboard.clear();
-        for (Entity sel : scene.selectedEntities) {
-          clipboard.add(sel.cloneEntity(-1, sel.name)); // Store pristine deep copies off-scene
-        }
-        if (showDebugRay) debugText = "Copied " + clipboard.size() + " items";
-      }
+      ui.copySelection();
     }
     if (keyCode == 86 || key == 'v' || key == 'V' || key == 22) {
-      if (!clipboard.isEmpty()) {
-        scene.clearSelection();
-        for (Entity clipE : clipboard) {
-          clipE.transform.position.x += 15;
-          clipE.transform.position.z += 15;
-          Entity ne = clipE.cloneEntity(scene.nextEntityId++, clipE.name + " Copy");
-          if (ne.name.endsWith(" Copy Copy")) ne.name = ne.name.replace(" Copy Copy", " Copy");
-          
-          scene.addEntityToSceneRecursive(ne); // This is the fix: recurse through children!
-          scene.selectEntity(ne, true); 
-        }
-        if (showDebugRay) debugText = "Pasted " + clipboard.size() + " items (incl. children)";
-      }
+      ui.pasteClipboard();
     }
   }
   
@@ -499,8 +577,12 @@ void keyPressed() {
 }
 
 void keyReleased() {
-  if (keyCode == ALT) isAltDown = false;
-  if (keyCode == CONTROL || keyCode == 157 || keyCode == 91) isCtrlDown = false;
+  if (keyCode == ALT) { isAltDown = false; println("Alt Up"); }
+  if (keyCode == SHIFT) { keyStates[SHIFT] = false; println("Shift Up"); }
+  if (keyCode == CONTROL || keyCode == 157 || keyCode == 91 || (key != CODED && key == 17)) {
+     isCtrlDown = false; 
+     println("Control Up"); 
+  }
   if (keyCode < 256) keyStates[keyCode] = false;
 }
 

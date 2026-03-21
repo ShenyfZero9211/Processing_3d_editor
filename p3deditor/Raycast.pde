@@ -118,6 +118,9 @@ class Raycaster {
       // Plane is drawn with box rotated PI/2 in X, making it lie on XZ naturally.
       // So the visual AABB is flat on Y axis (XZ slab)
       t = intersectAABB(localRay, new PVector(-50, -5, -50), new PVector(50, 5, 50));
+    } else if (e.type.equals("PointLight")) {
+      // Light sphere radius is 8 visually, but we use 12 for easier clicking
+      t = intersectSphere(localRay, new PVector(0,0,0), 12);
     }
     
     if (t > 0) {

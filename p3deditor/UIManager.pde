@@ -36,6 +36,18 @@ class UIManager {
       return;
     }
     Entity e = scene.selectedEntities.get(0);
+    String oldVal = "";
+    if (activeEditTarget == 1) oldVal = e.name;
+    else if (activeEditTarget == 2) oldVal = String.valueOf(e.transform.position.x);
+    else if (activeEditTarget == 3) oldVal = String.valueOf(e.transform.position.y);
+    else if (activeEditTarget == 4) oldVal = String.valueOf(e.transform.position.z);
+    else if (activeEditTarget == 5) oldVal = String.valueOf(degrees(e.transform.rotation.x));
+    else if (activeEditTarget == 6) oldVal = String.valueOf(degrees(e.transform.rotation.y));
+    else if (activeEditTarget == 7) oldVal = String.valueOf(degrees(e.transform.rotation.z));
+    else if (activeEditTarget == 8) oldVal = String.valueOf(e.transform.scale.x);
+    else if (activeEditTarget == 9) oldVal = String.valueOf(e.transform.scale.y);
+    else if (activeEditTarget == 10) oldVal = String.valueOf(e.transform.scale.z);
+    
     try {
       if (activeEditTarget == 1) e.name = activeEditString;
       else if (activeEditTarget == 2) e.transform.position.x = Float.parseFloat(activeEditString);
@@ -47,6 +59,17 @@ class UIManager {
       else if (activeEditTarget == 8) e.transform.scale.x = Float.parseFloat(activeEditString);
       else if (activeEditTarget == 9) e.transform.scale.y = Float.parseFloat(activeEditString);
       else if (activeEditTarget == 10) e.transform.scale.z = Float.parseFloat(activeEditString);
+      else if (activeEditTarget == 11) {
+        // Hex Color Support
+        try { 
+           String h = activeEditString.replace("#", "");
+           if (h.length() == 6) e.col = (int)Long.parseLong("FF" + h, 16);
+        } catch(Exception ex) {}
+      }
+      else if (activeEditTarget == 12) e.lightIntensity = Float.parseFloat(activeEditString);
+      else if (activeEditTarget == 13) e.lightRange = Float.parseFloat(activeEditString);
+      
+      scene.undoManager.push(new ValueEditCommand(scene, e, activeEditTarget, oldVal, activeEditString));
     } catch (Exception ex) {}
     activeEditTarget = 0;
   }
@@ -60,7 +83,9 @@ class UIManager {
       if (activeEditString.length() > 0) activeEditString = activeEditString.substring(0, activeEditString.length() - 1);
     } else {
       if (key == 0 || key == CODED) return;
-      if (activeEditTarget == 1 || (key >= '0' && key <= '9') || key == '.' || key == '-') {
+      // Allow hex characters for color editing
+      boolean isHexChar = (key >= 'a' && key <= 'f') || (key >= 'A' && key <= 'F');
+      if (activeEditTarget == 1 || activeEditTarget == 11 || (key >= '0' && key <= '9') || key == '.' || key == '-' || isHexChar) {
         activeEditString += key;
       }
     }
@@ -74,10 +99,11 @@ class UIManager {
       text(label + activeEditString + (frameCount % 60 < 30 ? "|" : ""), x, y);
     } else {
       if (mouseX > x - 5 && mouseX < x + 150 && mouseY > y - 15 && mouseY < y + 5) {
-        fill(200, 200, 255);
+        strokeWeight(1); stroke(150, 200);
+        fill(200, 200, 255, 100);
         rect(x - 5, y - 15, 150, 20, 3);
-        fill(0);
       }
+      noStroke();
       text(label + value, x, y);
     }
   }
@@ -130,12 +156,41 @@ class UIManager {
     text("Load Scene", 35, height - 80); text("Save Scene", 145, height - 80);
     
     fill(0, 150, 255);
-    rect(15, height - 60, 65, 30, 5); rect(90, height - 60, 65, 30, 5); rect(165, height - 60, 65, 30, 5);
+    rect(15, height - 60, 50, 30, 5); 
+    rect(70, height - 60, 50, 30, 5); 
+    rect(125, height - 60, 50, 30, 5);
+    rect(180, height - 60, 50, 30, 5); // +Light
     fill(255);
-    text("+Cube", 28, height - 40); text("+Sphere", 100, height - 40); text("+Plane", 178, height - 40);
+    text("+Cube", 21, height - 40); 
+    text("+Sph.", 80, height - 40); 
+    text("+Pln.", 135, height - 40);
+    text("+Lgt.", 191, height - 40);
     
     renderInspector();
+    renderStats();
     if (showContextMenu) renderContextMenu();
+  }
+
+  void renderStats() {
+    int totalPolys = 0;
+    for (Entity e : scene.entities) totalPolys += e.getPolyCount();
+    
+    float x = 270;
+    float y = 100;
+    textAlign(LEFT, TOP);
+    textSize(12);
+    
+    // Background plate (smaller and aligned to top-left)
+    noStroke();
+    fill(0, 100);
+    rect(x - 5, y - 5, 140, 60, 5);
+    
+    fill(200);
+    text("FPS: " + nf(frameRate, 0, 1), x, y);
+    text("Objects: " + scene.entities.size(), x, y + 15);
+    text("Polygons: " + totalPolys, x, y + 30);
+    
+    textAlign(LEFT, BASELINE); // Reset alignment
   }
 
   void renderScrollbar(int listTopY, int listBottomY) {
@@ -205,6 +260,22 @@ class UIManager {
       drawEditField("X: ", String.format(java.util.Locale.US, "%.1f", e.transform.scale.x), 8, panelX + 25, 410);
       drawEditField("Y: ", String.format(java.util.Locale.US, "%.1f", e.transform.scale.y), 9, panelX + 25, 430);
       drawEditField("Z: ", String.format(java.util.Locale.US, "%.1f", e.transform.scale.z), 10, panelX + 25, 450);
+      
+      fill(180, 255, 180); text("Material", panelX + 15, 490);
+      drawEditField("Color (Hex): #", hex(e.col, 6), 11, panelX + 25, 515);
+      
+      // Color Swatches Palette
+      int[] swatches = {#FFFFFF, #FF0000, #00FF00, #0000FF, #FFFF00, #00FFFF, #FF00FF, #FFA500, #808080, #333333};
+      for(int i=0; i<swatches.length; i++) {
+        fill(swatches[i]);
+        rect(panelX + 25 + i*20, 530, 15, 15, 3);
+      }
+      
+      if (e.type.equals("PointLight")) {
+        fill(180, 255, 180); text("Light Settings", panelX + 15, 570);
+        drawEditField("Intensity: ", String.format(java.util.Locale.US, "%.1f", e.lightIntensity), 12, panelX + 25, 595);
+        drawEditField("Range: ", String.format(java.util.Locale.US, "%.0f", e.lightRange), 13, panelX + 25, 615);
+      }
     } else {
       fill(255); textSize(14); text(scene.selectedEntities.size() + " Objects Selected", panelX + 15, 70);
     }
@@ -216,7 +287,8 @@ class UIManager {
   void renderContextMenu() {
     float w = 120;
     float h = 100;
-    fill(40, 240); stroke(100); rect(menuX, menuY, w, h, 4);
+    strokeWeight(1);
+    fill(40, 240); stroke(80); rect(menuX, menuY, w, h, 4);
     String[] items = {"Copy", "Paste", "Unparent", "Delete"};
     boolean canUnparent = false;
     for (Entity e : scene.selectedEntities) if (e.parent != null) canUnparent = true;
@@ -300,9 +372,10 @@ class UIManager {
           else if (mouseX > 125 && mouseX < 230) { selectOutput("Save:", "fileSelectedForSave"); return true; }
         }
         if (mouseY > height - 60 && mouseY < height - 30) {
-          if (mouseX > 15 && mouseX < 80) scene.addEntity("Cube", "Cube");
-          else if (mouseX > 90 && mouseX < 155) scene.addEntity("Sphere", "Sphere");
-          else if (mouseX > 165 && mouseX < 230) scene.addEntity("Plane", "Plane");
+          if (mouseX > 15 && mouseX < 65) scene.addEntity("Cube", "Cube");
+          else if (mouseX > 70 && mouseX < 120) scene.addEntity("Sphere", "Sphere");
+          else if (mouseX > 125 && mouseX < 175) scene.addEntity("Plane", "Plane");
+          else if (mouseX > 180 && mouseX < 230) scene.addEntity("Light", "PointLight");
           return true;
         }
         return true;
@@ -326,6 +399,21 @@ class UIManager {
     else if (mouseY > 395 && mouseY <= 415) { hitId = 8; startVal = String.format(java.util.Locale.US, "%.1f", e.transform.scale.x); }
     else if (mouseY > 415 && mouseY <= 435) { hitId = 9; startVal = String.format(java.util.Locale.US, "%.1f", e.transform.scale.y); }
     else if (mouseY > 435 && mouseY <= 455) { hitId = 10; startVal = String.format(java.util.Locale.US, "%.1f", e.transform.scale.z); }
+    else if (mouseY > 500 && mouseY <= 525) { hitId = 11; startVal = hex(e.col, 6); }
+    else if (mouseY > 530 && mouseY <= 545) {
+      // Swatch Click
+      int[] swatches = {#FFFFFF, #FF0000, #00FF00, #0000FF, #FFFF00, #00FFFF, #FF00FF, #FFA500, #808080, #333333};
+      int swatchIdx = (mouseX - (width-panelWidth+25)) / 20;
+      if (swatchIdx >= 0 && swatchIdx < swatches.length) {
+        e.col = color(red(swatches[swatchIdx]), green(swatches[swatchIdx]), blue(swatches[swatchIdx]));
+        return;
+      }
+    }
+    else if (e.type.equals("PointLight")) {
+       if (mouseY > 580 && mouseY <= 600) { hitId = 12; startVal = String.format(java.util.Locale.US, "%.1f", e.lightIntensity); }
+       else if (mouseY > 600 && mouseY <= 620) { hitId = 13; startVal = String.format(java.util.Locale.US, "%.0f", e.lightRange); }
+    }
+    
     if (hitId > 0) { activeEditTarget = hitId; activeEditString = startVal; }
     else commitEdit();
   }
@@ -344,12 +432,22 @@ class UIManager {
       Entity ne = clipE.cloneEntity(scene.nextEntityId++, clipE.name + " Copy");
       scene.addEntityToSceneRecursive(ne);
       scene.selectEntity(ne, true);
+      scene.undoManager.push(new AddEntityCommand(scene, ne));
     }
   }
   
-  void unparentSelection() { for (Entity e : scene.selectedEntities) e.setParent(null, true); }
+  void unparentSelection() {
+    for (Entity e : scene.selectedEntities) {
+      if (e.parent != null) {
+        scene.undoManager.push(new ReparentCommand(scene, e, e.parent, null));
+        e.setParent(null, true);
+      }
+    }
+  }
   
   void deleteSelection() {
+    if (scene.selectedEntities.isEmpty()) return;
+    scene.undoManager.push(new DeleteEntityCommand(scene, scene.selectedEntities));
     for (Entity e : new ArrayList<Entity>(scene.selectedEntities)) {
       if (e.parent != null) e.parent.children.remove(e);
       scene.entities.remove(e);
@@ -375,8 +473,15 @@ class UIManager {
   
   void handleMouseReleased() {
     if (hierarchyDragSource != null && hasDraggedHierarchy) {
-      if (mouseX < panelWidth && hierarchyDragTarget != null) hierarchyDragTarget.addChild(hierarchyDragSource);
-      else if (mouseX < panelWidth && hierarchyDragSource.parent != null) hierarchyDragSource.parent.removeChild(hierarchyDragSource);
+      Entity oldP = hierarchyDragSource.parent;
+      Entity newP = null;
+      if (mouseX < panelWidth && hierarchyDragTarget != null) newP = hierarchyDragTarget;
+      
+      if (newP != oldP) {
+        scene.undoManager.push(new ReparentCommand(scene, hierarchyDragSource, oldP, newP));
+        if (newP != null) newP.addChild(hierarchyDragSource);
+        else hierarchyDragSource.setParent(null, true);
+      }
     }
     hierarchyDragSource = null; hierarchyDragTarget = null;
   }
