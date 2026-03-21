@@ -6,11 +6,11 @@ class Gizmo {
   
   PVector getCenter(SceneManager scene) {
     if (scene.selectedEntities.isEmpty()) return null;
-    if (scene.selectedEntities.size() == 1) return scene.selectedEntities.get(0).transform.position.copy();
+    if (scene.selectedEntities.size() == 1) return scene.selectedEntities.get(0).getWorldPosition();
     
     PVector center = new PVector();
     for (Entity e : scene.selectedEntities) {
-      center.add(e.transform.position);
+      center.add(e.getWorldPosition());
     }
     center.div(scene.selectedEntities.size());
     return center;

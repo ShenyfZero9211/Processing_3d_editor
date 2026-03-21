@@ -81,13 +81,8 @@ class Raycaster {
   }
   
   float intersectEntity(Ray worldRay, Entity e) {
-    // Build Model Matrix
-    PMatrix3D model = new PMatrix3D();
-    model.translate(e.transform.position.x, e.transform.position.y, e.transform.position.z);
-    model.rotateX(e.transform.rotation.x);
-    model.rotateY(e.transform.rotation.y);
-    model.rotateZ(e.transform.rotation.z);
-    model.scale(e.transform.scale.x, e.transform.scale.y, e.transform.scale.z);
+    // Use full world matrix for nested hierarchy picking
+    PMatrix3D model = e.getWorldMatrix();
     
     PMatrix3D invModel = model.get();
     if (!invModel.invert()) return -1; // e.g. scale is 0

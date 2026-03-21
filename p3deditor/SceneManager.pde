@@ -10,6 +10,14 @@ class SceneManager {
     selectEntity(e, false);
   }
   
+  void addEntityToSceneRecursive(Entity e) {
+    if (e.id == -1) e.id = nextEntityId++;
+    if (!entities.contains(e)) entities.add(e);
+    for (Entity child : e.children) {
+      addEntityToSceneRecursive(child);
+    }
+  }
+  
   void render(PApplet app) {
     // Advanced 3-point Studio Lighting
     app.ambientLight(60, 60, 60);
@@ -18,8 +26,11 @@ class SceneManager {
     app.directionalLight(80, 80, 90, 0.0f, 0.0f, -1.0f);    // Rim Light (Backlight)
     app.lightSpecular(200, 200, 200);
     
+    // ONLY start rendering from root entities (hierarchical recursion handles children)
     for(Entity e : entities) {
-      e.render(app);
+      if (e.parent == null) {
+        e.render(app);
+      }
     }
     
     // Render Gizmo over selected entities
@@ -38,6 +49,19 @@ class SceneManager {
       selectedEntities.add(e);
       e.selected = true;
     }
+  }
+  
+  Entity pickEntity(Ray ray, Raycaster caster) {
+    Entity closest = null;
+    float minDist = Float.MAX_VALUE;
+    for (Entity e : entities) {
+      float t = caster.intersectEntity(ray, e);
+      if (t > 0 && t < minDist) {
+        minDist = t;
+        closest = e;
+      }
+    }
+    return closest;
   }
   
   void clearSelection() {
@@ -61,6 +85,7 @@ class SceneManager {
       ej.setString("name", e.name);
       ej.setString("type", e.type);
       ej.setInt("color", e.col);
+      ej.setInt("parentId", (e.parent != null) ? e.parent.id : -1);
       
       JSONObject t = new JSONObject();
       t.setFloat("px", e.transform.position.x);
@@ -98,6 +123,9 @@ class SceneManager {
       nextEntityId = root.getInt("nextEntityId");
       
       JSONArray entArr = root.getJSONArray("entities");
+      ArrayList<Integer> parentIds = new ArrayList<Integer>();
+      
+      // Pass 1: Create all entities
       for (int i=0; i<entArr.size(); i++) {
         JSONObject ej = entArr.getJSONObject(i);
         Entity e = new Entity(ej.getInt("id"), ej.getString("name"), ej.getString("type"));
@@ -109,10 +137,27 @@ class SceneManager {
         e.transform.scale.set(t.getFloat("sx"), t.getFloat("sy"), t.getFloat("sz"));
         
         entities.add(e);
+        parentIds.add(ej.isNull("parentId") ? -1 : ej.getInt("parentId"));
       }
+      
+      // Pass 2: Link parents
+      for (int i=0; i<entities.size(); i++) {
+        int pid = parentIds.get(i);
+        if (pid != -1) {
+          Entity child = entities.get(i);
+          for (Entity potentialParent : entities) {
+            if (potentialParent.id == pid) {
+              potentialParent.addChild(child);
+              break;
+            }
+          }
+        }
+      }
+      
       println("Loaded scene from " + file.getAbsolutePath());
     } catch (Exception ex) {
       println("Failed to load scene: " + ex.getMessage());
+      ex.printStackTrace();
     }
   }
 }

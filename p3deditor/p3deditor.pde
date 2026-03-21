@@ -160,11 +160,26 @@ void drawGrid() {
 // Global input routing to UI or Camera
 void mousePressed() {
   if (showUI) {
-    if (ui.isEditingText()) ui.commitEdit(); // Always commit active edits when clicking away
+    if (ui.isEditingText()) ui.commitEdit(); 
     if (ui.handleMousePressed()) return; 
   }
   
   Ray ray = raycaster.getPickRay(mouseX, mouseY, width, height, savedProj, savedView);
+  
+  if (mouseButton == RIGHT) {
+     // Viewport right-click picking
+     if (mouseX >= ui.panelWidth && mouseX <= width - ui.panelWidth) {
+        Entity hit = scene.pickEntity(ray, raycaster);
+        if (hit != null) {
+           scene.selectEntity(hit, false);
+           ui.showContextMenu = true;
+           ui.menuX = mouseX;
+           ui.menuY = mouseY;
+           return; // Interrupted by menu
+        }
+     }
+  }
+  
   if (showDebugRay) debugRay = ray;
   
   if (showDebugRay) {
@@ -244,6 +259,8 @@ void setupDrag() {
 }
 
 void mouseDragged() {
+  if (showUI) ui.handleMouseDragged();
+  
   if (ui.isDraggingScrollbar) {
       int listTopY = 50;
       int listBottomY = height - 120;
@@ -381,6 +398,8 @@ PVector worldToScreen(PVector w) {
 }
 
 void mouseReleased() {
+  if (showUI) ui.handleMouseReleased();
+  
   if (ui.isDraggingScrollbar) {
     ui.isDraggingScrollbar = false;
   }
@@ -463,17 +482,15 @@ void keyPressed() {
       if (!clipboard.isEmpty()) {
         scene.clearSelection();
         for (Entity clipE : clipboard) {
-          // Permanently step the clipboard's hidden entity location so subsequent pastes keep migrating!
           clipE.transform.position.x += 15;
           clipE.transform.position.z += 15;
-          
           Entity ne = clipE.cloneEntity(scene.nextEntityId++, clipE.name + " Copy");
-          if (ne.name.endsWith(" Copy Copy")) ne.name = ne.name.replace(" Copy Copy", " Copy"); // Prevent crazy long names
+          if (ne.name.endsWith(" Copy Copy")) ne.name = ne.name.replace(" Copy Copy", " Copy");
           
-          scene.entities.add(ne);
-          scene.selectEntity(ne, true); // Append multiselect
+          scene.addEntityToSceneRecursive(ne); // This is the fix: recurse through children!
+          scene.selectEntity(ne, true); 
         }
-        if (showDebugRay) debugText = "Pasted " + clipboard.size() + " items";
+        if (showDebugRay) debugText = "Pasted " + clipboard.size() + " items (incl. children)";
       }
     }
   }
