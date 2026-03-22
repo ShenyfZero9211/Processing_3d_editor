@@ -5,6 +5,51 @@ class SceneManager {
   int nextEntityId = 1;
   UndoManager undoManager = new UndoManager();
   boolean useLocalSpace = false; // Default to World as requested
+  Entity lastHoveredEntity = null;
+  
+  // v0.5.0: Runtime & Snapshot
+  boolean isRuntime = false;
+  JSONArray sceneSnapshot = null;
+  int snapshotNextId = 1;
+  
+  void saveSnapshot() {
+    sceneSnapshot = new JSONArray();
+    for (int i=0; i<entities.size(); i++) {
+      sceneSnapshot.setJSONObject(i, entities.get(i).toJSON());
+    }
+    snapshotNextId = nextEntityId;
+    println("Scene Snapshot Saved (" + entities.size() + " entities)");
+  }
+  
+  void restoreSnapshot() {
+    if (sceneSnapshot == null) return;
+    
+    entities.clear();
+    selectedEntities.clear();
+    nextEntityId = snapshotNextId;
+    
+    // First pass: Recreate all entities
+    HashMap<Integer, Entity> idMap = new HashMap<Integer, Entity>();
+    for (int i=0; i<sceneSnapshot.size(); i++) {
+      JSONObject json = sceneSnapshot.getJSONObject(i);
+      Entity e = new Entity(json.getInt("id"), json.getString("name"), json.getString("type"));
+      e.fromJSON(json);
+      entities.add(e);
+      idMap.put(e.id, e);
+    }
+    
+    // Second pass: Reconstruct hierarchy
+    for (int i=0; i<sceneSnapshot.size(); i++) {
+      JSONObject json = sceneSnapshot.getJSONObject(i);
+      if (json.hasKey("parentId")) {
+        Entity child = idMap.get(json.getInt("id"));
+        Entity parent = idMap.get(json.getInt("parentId"));
+        if (child != null && parent != null) child.setParent(parent, false);
+      }
+    }
+    
+    println("Scene Snapshot Restored");
+  }
   
   Entity findEntityById(int id) {
     for (Entity e : entities) if (e.id == id) return e;
@@ -16,6 +61,24 @@ class SceneManager {
     entities.add(e);
     selectEntity(e, false);
     undoManager.push(new AddEntityCommand(this, e));
+  }
+  
+  void triggerEvent(Entity e, String type) {
+    if (e == null) return;
+    ArrayList<String> scripts = e.eventHandlers.get(type);
+    if (scripts != null) {
+      for (String scriptPath : scripts) {
+        String[] lines = p3deditor.this.loadStrings(scriptPath);
+        if (lines != null) {
+          if (!type.equals("Update")) {
+             p3deditor.this.ui.debugConsole.addLog("> Event [" + type + "] on '" + e.name + "' triggered script: " + scriptPath, 2);
+          }
+          p3deditor.this.scriptManager.runScript(scriptPath, String.join("\n", lines), e);
+        } else {
+          p3deditor.this.ui.debugConsole.addLog("Error: Event script not found: " + scriptPath, 3);
+        }
+      }
+    }
   }
   
   void addEntityToSceneRecursive(Entity e) {

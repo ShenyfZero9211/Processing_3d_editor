@@ -153,7 +153,7 @@ class CommandInterpreter {
         String[] lines = p3deditor.this.loadStrings(filename);
         if (lines == null) return "Error: Script not found: " + filename;
         if (scriptManager != null) {
-          scriptManager.runScript(filename, String.join("\n", lines));
+          scriptManager.runScript(filename, String.join("\n", lines), null); // No context for manual run
           return "SUCCESS: Started logic-script " + filename;
         }
         return "Error: ScriptManager not initialized";
@@ -161,9 +161,39 @@ class CommandInterpreter {
       else if (rawCmd.equals("stop")) {
         if (scriptManager != null) {
           scriptManager.stopAll();
+          if (scene.isRuntime) {
+            scene.isRuntime = false;
+            scene.restoreSnapshot();
+            scene.lastHoveredEntity = null; // Clear hover state
+            return "SUCCESS: Stopped Play Mode & Restored Scene";
+          }
           return "SUCCESS: Stopped all scripts";
         }
         return "Error: ScriptManager not initialized";
+      }
+      else if (rawCmd.equals("play") || rawCmd.equals("start")) {
+        if (scene.isRuntime) return "Already in Play Mode";
+        scene.saveSnapshot();
+        scene.isRuntime = true;
+        scene.clearSelection();
+        for (Entity e : scene.entities) {
+          scene.triggerEvent(e, "Start");
+        }
+        return "SUCCESS: Entered Play Mode";
+      }
+      else if (rawCmd.equals("mount")) {
+        if (parts.size() < 4) return "Error: mount <entity> <event> <script>";
+        Entity e = findEntity(parts.get(1));
+        if (e == null) return "Error: Entity not found: " + parts.get(1);
+        e.mount(parts.get(2), parts.get(3));
+        return "SUCCESS: Mounted " + parts.get(3) + " to " + parts.get(1) + ":" + parts.get(2);
+      }
+      else if (rawCmd.equals("unmount")) {
+        if (parts.size() < 3) return "Error: unmount <entity> <event>";
+        Entity e = findEntity(parts.get(1));
+        if (e == null) return "Error: Entity not found: " + parts.get(1);
+        e.eventHandlers.remove(parts.get(2));
+        return "SUCCESS: Unmounted events from " + parts.get(1) + ":" + parts.get(2);
       }
       else if (rawCmd.equals("exec") || rawCmd.equals("script")) {
         if (parts.size() < 2) return "Error: exec <filename>";
@@ -175,7 +205,7 @@ class CommandInterpreter {
         return sb.toString();
       }
       else if (rawCmd.equals("help")) {
-        return "CMDS: move, tp, color, scale, delete, rename, clear, echo, alias, unalias, exec, run, stop, help";
+        return "CMDS: move, tp, color, scale, delete, rename, clear, echo, play, stop, mount, unmount, alias, unalias, exec, run, help";
       }
     } catch (Exception ex) {
       return "Error: " + ex.getMessage();

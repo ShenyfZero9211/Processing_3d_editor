@@ -16,11 +16,12 @@ class ScriptContext {
   
   long waitUntil = 0;
   boolean terminated = false;
-  Entity targetEntity = null; // "self"
+  Entity contextEntity = null; // v0.5.0: The entity this script is mounted on
   
-  ScriptContext(String name, String[] rawLines) {
+  ScriptContext(String name, String[] rawLines, Entity context) {
     this.scriptName = name;
     this.lines = rawLines;
+    this.contextEntity = context;
     preScanLabels();
   }
   
@@ -187,6 +188,16 @@ class ScriptContext {
   }
   
   String substituteVariables(String text) {
+    // v0.5.0: Handle $this context
+    if (contextEntity != null) {
+      String ename = contextEntity.name;
+      // If the entity name contains spaces, wrap it in quotes so parseArgs treats it as one token
+      if (ename.contains(" ")) {
+        ename = "\"" + ename + "\"";
+      }
+      text = text.replace("$this", ename);
+    }
+    
     if (!text.contains("$")) return text;
     // Sort keys by length descending to prevent partial matches ($xPos vs $x)
     String[] keys = variables.keySet().toArray(new String[0]);
@@ -209,10 +220,10 @@ class ScriptManager {
     this.interpreter = interpreter;
   }
   
-  void runScript(String name, String content) {
+  void runScript(String name, String content, Entity context) {
     String[] lines = content.split("\\r?\\n");
-    activeScripts.add(new ScriptContext(name, lines));
-    System.out.println("P3DES: Started script " + name);
+    activeScripts.add(new ScriptContext(name, lines, context));
+    System.out.println("P3DES: Started script " + name + (context != null ? " on " + context.name : ""));
   }
   
   void update() {
@@ -228,5 +239,12 @@ class ScriptManager {
   
   void stopAll() {
     activeScripts.clear();
+  }
+  
+  boolean isEntityExecuting(Entity e, String scriptTitle) {
+     for (ScriptContext sc : activeScripts) {
+       if (sc.contextEntity == e && sc.scriptName.equals(scriptTitle)) return true;
+     }
+     return false;
   }
 }

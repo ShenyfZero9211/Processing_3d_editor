@@ -53,10 +53,15 @@ void setup() {
   size(1280, 720, P3D);
   surface.setLocation((displayWidth - width) / 2, (displayHeight - height) / 2);
   
-  // Initialize Chinese-compatible font
-  mainFont = createFont("Microsoft YaHei", 14, true); 
-  if (mainFont == null) mainFont = createFont("SimHei", 14, true);
-  if (mainFont == null) mainFont = createFont("SansSerif", 14, true);
+  // Initialize Fonts: Consolas for English/Code, Heiti for Chinese (size 12 for pro look)
+  java.awt.Font testFont = new java.awt.Font("Consolas", java.awt.Font.PLAIN, 12);
+  if (testFont.canDisplay('中')) {
+    mainFont = createFont("Consolas", 12, true); 
+  } else {
+    mainFont = createFont("Microsoft YaHei", 12, true); 
+  }
+  if (mainFont == null) mainFont = createFont("SimHei", 12, true);
+  if (mainFont == null) mainFont = createFont("SansSerif", 12, true);
   textFont(mainFont);
   
   try {
@@ -175,6 +180,39 @@ void draw() {
   // Final UI Layer (Must be last to cover all overlays)
   if (showUI) {
     ui.render();
+    ui.renderOverlayInstructions();
+  }
+  
+  // v0.5.0: Play Mode Indicator (Colored Border & Status)
+  if (scene.isRuntime) {
+    camera(); hint(DISABLE_DEPTH_TEST); noLights();
+    stroke(#4285F4, 200); strokeWeight(10); noFill();
+    rect(0, 0, width, height);
+    fill(#4285F4); textSize(24); textAlign(CENTER, TOP);
+    text("RUNNING (PLAY MODE)", width/2, 45);
+    
+    // --- EVALUATE FRAME-BASED RUNTIME EVENTS ---
+    Ray ray = raycaster.getPickRay(mouseX, mouseY, width, height, savedProj, savedView);
+    Entity hoverHit = scene.pickEntity(ray, raycaster);
+    if (hoverHit != scene.lastHoveredEntity) {
+       if (hoverHit != null) {
+          scene.triggerEvent(hoverHit, "onHover");
+       }
+       scene.lastHoveredEntity = hoverHit;
+    }
+    
+    for (Entity e : scene.entities) {
+       if (e.eventHandlers.containsKey("Update")) {
+          // Because triggerEvent launches all scripts via scriptManager.runScript, 
+          // we need to only trigger it if they are NOT already running.
+          for (String scriptPath : e.eventHandlers.get("Update")) {
+             if (!scriptManager.isEntityExecuting(e, scriptPath)) {
+                String[] sLines = loadStrings(scriptPath);
+                if (sLines != null) scriptManager.runScript(scriptPath, join(sLines, "\n"), e);
+             }
+          }
+       }
+    }
   }
   
   hint(ENABLE_DEPTH_TEST);
@@ -196,6 +234,16 @@ void mousePressed() {
   if (showUI) {
     if (ui.isEditingText()) ui.commitEdit(); 
     if (ui.handleMousePressed()) return; 
+  }
+  
+  // v0.5.0: Runtime Event Distribution
+  if (scene.isRuntime) {
+     Ray ray = raycaster.getPickRay(mouseX, mouseY, width, height, savedProj, savedView);
+     Entity hit = scene.pickEntity(ray, raycaster);
+     if (hit != null) {
+       scene.triggerEvent(hit, "onClick");
+     }
+     return; // Block selection/gizmos in runtime
   }
   
   Ray ray = raycaster.getPickRay(mouseX, mouseY, width, height, savedProj, savedView);
@@ -614,7 +662,6 @@ void keyReleased() {
   if (keyCode < 256) keyStates[keyCode] = false;
 }
 
-// OS specific Save/Load Callbacks initiated by UI routines natively
 void fileSelectedForLoad(File selection) {
   if (selection != null) {
     scene.loadScene(selection);
@@ -624,5 +671,19 @@ void fileSelectedForLoad(File selection) {
 void fileSelectedForSave(File selection) {
   if (selection != null) {
     scene.saveScene(selection);
+  }
+}
+
+// Variables to hold state for script mounting UI
+Entity scriptMountTarget = null;
+String scriptMountEvent = "";
+
+void fileSelectedForScript(File selection) {
+  if (selection != null && scriptMountTarget != null) {
+    String scriptName = selection.getName();
+    scriptMountTarget.mount(scriptMountEvent, scriptName);
+    ui.debugConsole.addLog("Mounted script '" + scriptName + "' to [" + scriptMountEvent + "] on " + scriptMountTarget.name, 0);
+  } else if (selection == null) {
+    ui.debugConsole.addLog("Script selection cancelled.", 1);
   }
 }

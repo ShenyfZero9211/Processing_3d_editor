@@ -12,6 +12,16 @@ class Entity {
   float lightIntensity = 1.0f;
   float lightRange = 300.0f;
   
+  // v0.5.0: Events & Scripts mounting
+  HashMap<String, ArrayList<String>> eventHandlers = new HashMap<String, ArrayList<String>>();
+  
+  void mount(String eventType, String scriptPath) {
+    if (!eventHandlers.containsKey(eventType)) {
+      eventHandlers.put(eventType, new ArrayList<String>());
+    }
+    eventHandlers.get(eventType).add(scriptPath);
+  }
+  
   Entity(int id, String name, String type) {
     this.id = id;
     this.name = name;
@@ -188,6 +198,79 @@ class Entity {
       // Gimbal lock
       transform.rotation.y = atan2(-r31, r11);
       transform.rotation.z = 0;
+    }
+  }
+
+  // v0.5.0: Snapshot Support
+  JSONObject toJSON() {
+    JSONObject json = new JSONObject();
+    json.setInt("id", id);
+    json.setString("name", name);
+    json.setString("type", type);
+    json.setInt("color", col);
+    
+    JSONObject pos = new JSONObject();
+    pos.setFloat("x", transform.position.x);
+    pos.setFloat("y", transform.position.y);
+    pos.setFloat("z", transform.position.z);
+    json.setJSONObject("pos", pos);
+    
+    JSONObject rot = new JSONObject();
+    rot.setFloat("x", transform.rotation.x);
+    rot.setFloat("y", transform.rotation.y);
+    rot.setFloat("z", transform.rotation.z);
+    json.setJSONObject("rot", rot);
+    
+    JSONObject scl = new JSONObject();
+    scl.setFloat("x", transform.scale.x);
+    scl.setFloat("y", transform.scale.y);
+    scl.setFloat("z", transform.scale.z);
+    json.setJSONObject("scale", scl);
+    
+    if (type.equals("PointLight")) {
+      json.setFloat("intensity", lightIntensity);
+      json.setFloat("range", lightRange);
+    }
+    
+    JSONArray evts = new JSONArray();
+    int idx = 0;
+    for (String key : eventHandlers.keySet()) {
+      for (String script : eventHandlers.get(key)) {
+        JSONObject h = new JSONObject();
+        h.setString("event", key);
+        h.setString("script", script);
+        evts.setJSONObject(idx++, h);
+      }
+    }
+    json.setJSONArray("events", evts);
+    
+    if (parent != null) json.setInt("parentId", parent.id);
+    
+    return json;
+  }
+  
+  void fromJSON(JSONObject json) {
+    this.name = json.getString("name");
+    this.col = json.getInt("color");
+    JSONObject pos = json.getJSONObject("pos");
+    transform.position.set(pos.getFloat("x"), pos.getFloat("y"), pos.getFloat("z"));
+    JSONObject rot = json.getJSONObject("rot");
+    transform.rotation.set(rot.getFloat("x"), rot.getFloat("y"), rot.getFloat("z"));
+    JSONObject scl = json.getJSONObject("scale");
+    transform.scale.set(scl.getFloat("x"), scl.getFloat("y"), scl.getFloat("z"));
+    
+    if (type.equals("PointLight")) {
+      lightIntensity = json.getFloat("intensity");
+      lightRange = json.getFloat("range");
+    }
+    
+    eventHandlers.clear();
+    if (!json.isNull("events")) {
+      JSONArray evts = json.getJSONArray("events");
+      for (int i=0; i<evts.size(); i++) {
+        JSONObject h = evts.getJSONObject(i);
+        mount(h.getString("event"), h.getString("script"));
+      }
     }
   }
 
