@@ -1,0 +1,4 @@
+echo "osc send /test 1"
+
+# 执行osc send
+osc_send /test 1

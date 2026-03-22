@@ -13,6 +13,10 @@ ScriptManager scriptManager;
 PFont mainFont;
 Robot robot;
 
+// v0.6.0: OSC Dispatcher
+OSCClient oscClient = new OSCClient();
+boolean oscTelemetryEnabled = false;
+
 int draggingAxis = 0; // 0=none, 1=X, 2=Y, 3=Z
 float startDragMouseX, startDragMouseY;
 
@@ -213,6 +217,24 @@ void draw() {
           }
        }
     }
+  }
+  
+  // v0.6.0: OSC TELEMETRY AUTO-BROADCAST (60FPS)
+  // We send the latest coordinates of every entity independently via UDP.
+  if (oscTelemetryEnabled && oscClient.isConnected) {
+     for (Entity e : scene.entities) {
+        OSCMessage msg = new OSCMessage("/p3de/" + e.name.replace(" ", "_") + "/transform");
+        msg.addFloat(e.transform.position.x);
+        msg.addFloat(e.transform.position.y);
+        msg.addFloat(e.transform.position.z);
+        msg.addFloat(e.transform.rotation.x);
+        msg.addFloat(e.transform.rotation.y);
+        msg.addFloat(e.transform.rotation.z);
+        msg.addFloat(e.transform.scale.x);
+        msg.addFloat(e.transform.scale.y);
+        msg.addFloat(e.transform.scale.z);
+        oscClient.send(msg);
+     }
   }
   
   hint(ENABLE_DEPTH_TEST);

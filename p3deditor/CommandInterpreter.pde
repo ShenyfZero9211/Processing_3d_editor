@@ -204,8 +204,40 @@ class CommandInterpreter {
         for (int i=1; i<parts.size(); i++) sb.append(parts.get(i)).append(i == parts.size()-1 ? "" : " ");
         return sb.toString();
       }
+      else if (rawCmd.equals("osc_connect")) {
+        if (parts.size() < 3) return "Error: osc_connect <ip> <port>";
+        try {
+          int port = Integer.parseInt(parts.get(2));
+          p3deditor.this.oscClient.connect(parts.get(1), port);
+          return "SUCCESS: Connected OSC to " + parts.get(1) + ":" + port;
+        } catch (Exception e) {
+          return "Error: Invalid port";
+        }
+      }
+      else if (rawCmd.equals("osc_send")) {
+        if (parts.size() < 2) return "Error: osc_send <address> [args...]";
+        if (!p3deditor.this.oscClient.isConnected) return "Error: OSC not connected";
+        
+        OSCMessage msg = new OSCMessage(parts.get(1));
+        for (int i=2; i<parts.size(); i++) {
+          String arg = parts.get(i);
+          try {
+            if (arg.contains(".")) msg.addFloat(Float.parseFloat(arg));
+            else msg.addInt(Integer.parseInt(arg));
+          } catch (Exception e) {
+            msg.addString(arg);
+          }
+        }
+        p3deditor.this.oscClient.send(msg);
+        return "SUCCESS: Sent OSC Message to " + parts.get(1);
+      }
+      else if (rawCmd.equals("osc_telemetry")) {
+        if (parts.size() < 2) return "Error: osc_telemetry <on|off>";
+        p3deditor.this.oscTelemetryEnabled = parts.get(1).equalsIgnoreCase("on");
+        return "SUCCESS: OSC Telemetry is now " + (p3deditor.this.oscTelemetryEnabled ? "ON" : "OFF");
+      }
       else if (rawCmd.equals("help")) {
-        return "CMDS: move, tp, color, scale, delete, rename, clear, echo, play, stop, mount, unmount, alias, unalias, exec, run, help";
+        return "CMDS: move, tp, color, scale, delete, rename, clear, echo, play, stop, mount, unmount, alias, unalias, exec, run, osc_connect, osc_send, osc_telemetry, help";
       }
     } catch (Exception ex) {
       return "Error: " + ex.getMessage();

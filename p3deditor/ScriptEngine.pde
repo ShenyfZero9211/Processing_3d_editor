@@ -196,6 +196,17 @@ class ScriptContext {
         ename = "\"" + ename + "\"";
       }
       text = text.replace("$this", ename);
+      
+      // v0.6.0: Local Properties mapping
+      if (text.contains("$px")) text = text.replace("$px", String.valueOf(contextEntity.transform.position.x));
+      if (text.contains("$py")) text = text.replace("$py", String.valueOf(contextEntity.transform.position.y));
+      if (text.contains("$pz")) text = text.replace("$pz", String.valueOf(contextEntity.transform.position.z));
+      if (text.contains("$rx")) text = text.replace("$rx", String.valueOf(contextEntity.transform.rotation.x));
+      if (text.contains("$ry")) text = text.replace("$ry", String.valueOf(contextEntity.transform.rotation.y));
+      if (text.contains("$rz")) text = text.replace("$rz", String.valueOf(contextEntity.transform.rotation.z));
+      if (text.contains("$sx")) text = text.replace("$sx", String.valueOf(contextEntity.transform.scale.x));
+      if (text.contains("$sy")) text = text.replace("$sy", String.valueOf(contextEntity.transform.scale.y));
+      if (text.contains("$sz")) text = text.replace("$sz", String.valueOf(contextEntity.transform.scale.z));
     }
     
     if (!text.contains("$")) return text;
