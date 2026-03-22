@@ -17,6 +17,9 @@ Robot robot;
 OSCClient oscClient = new OSCClient();
 boolean oscTelemetryEnabled = false;
 
+// v0.7.0: PBR Rendering
+PShader pbrShader;
+
 int draggingAxis = 0; // 0=none, 1=X, 2=Y, 3=Z
 float startDragMouseX, startDragMouseY;
 
@@ -55,6 +58,7 @@ PGraphics pickerBuffer;
 
 void setup() {
   size(1280, 720, P3D);
+  hint(ENABLE_TEXTURE_MIPMAPS);
   surface.setLocation((displayWidth - width) / 2, (displayHeight - height) / 2);
   
   // Initialize Fonts: Consolas for English/Code, Heiti for Chinese (size 12 for pro look)
@@ -83,6 +87,9 @@ void setup() {
   
   scriptManager = new ScriptManager(interpreter);
   interpreter.setScriptManager(scriptManager);
+  
+  // v0.7.0: Load PBR Shaders
+  pbrShader = loadShader("pbr.frag", "pbr.vert");
   
   scene.addEntity("Cube 1", "Cube");
   scene.addEntity("Sphere 1", "Sphere");
@@ -165,12 +172,14 @@ void draw() {
   
   // Box Select GUI Screen Overlay
   if (isBoxSelecting) {
+    pushStyle();
     stroke(100, 200, 255);
     strokeWeight(1);
     fill(100, 200, 255, 50);
     rectMode(CORNERS);
     rect(boxSelectStartX, boxSelectStartY, mouseX, mouseY);
     rectMode(CORNER);
+    popStyle();
   }
   
   // Debug Overlay Text
@@ -241,12 +250,14 @@ void draw() {
 }
 
 void drawGrid() {
+  pushStyle();
   stroke(100);
   strokeWeight(1);
   for(int i=-10; i<=10; i++) {
     line(i*50, 0, -500, i*50, 0, 500);
     line(-500, 0, i*50, 500, 0, i*50);
   }
+  popStyle();
 }
 
 // Global input routing to UI or Camera
@@ -707,5 +718,57 @@ void fileSelectedForScript(File selection) {
     ui.debugConsole.addLog("Mounted script '" + scriptName + "' to [" + scriptMountEvent + "] on " + scriptMountTarget.name, 0);
   } else if (selection == null) {
     ui.debugConsole.addLog("Script selection cancelled.", 1);
+  }
+}
+
+// v0.8.0: Asset Loading Callbacks
+void albedoMapSelected(File selection) {
+  if (selection != null && scriptMountTarget != null) {
+    PImage img = loadImage(selection.getAbsolutePath());
+    if (img != null) {
+      scriptMountTarget.material.setAlbedoMap(img);
+      ui.debugConsole.addLog("Loaded Albedo Map to " + scriptMountTarget.name, 0);
+    }
+  }
+}
+
+void metallicMapSelected(File selection) {
+  if (selection != null && scriptMountTarget != null) {
+    PImage img = loadImage(selection.getAbsolutePath());
+    if (img != null) {
+      scriptMountTarget.material.setMetallicMap(img);
+      ui.debugConsole.addLog("Loaded Metallic Map to " + scriptMountTarget.name, 0);
+    }
+  }
+}
+
+void roughnessMapSelected(File selection) {
+  if (selection != null && scriptMountTarget != null) {
+    PImage img = loadImage(selection.getAbsolutePath());
+    if (img != null) {
+      scriptMountTarget.material.setRoughnessMap(img);
+      ui.debugConsole.addLog("Loaded Roughness Map to " + scriptMountTarget.name, 0);
+    }
+  }
+}
+
+void envMapSelected(File selection) {
+  if (selection != null) {
+    PImage img = loadImage(selection.getAbsolutePath());
+    if (img != null) {
+      scene.envMap = img;
+      ui.debugConsole.addLog("Loaded Global Environment Map", 0);
+    }
+  }
+}
+
+void modelSelected(File selection) {
+  if (selection != null && scriptMountTarget != null) {
+    PShape s = loadShape(selection.getAbsolutePath());
+    if (s != null) {
+      scriptMountTarget.model = s;
+      scriptMountTarget.type = "Model";
+      ui.debugConsole.addLog("Loaded Model OBJ to " + scriptMountTarget.name, 0);
+    }
   }
 }

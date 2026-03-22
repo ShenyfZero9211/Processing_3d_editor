@@ -19,6 +19,7 @@ class Gizmo {
   void render(PApplet app, SceneManager scene) {
     if (mode == 4 || scene.selectedEntities.isEmpty()) return;
     
+    app.pushStyle();
     PVector centerPos = getCenter(scene);
     int drawMode = mode; // Allow visual switching for all selections
     
@@ -93,6 +94,7 @@ class Gizmo {
     
     app.popMatrix();
     app.hint(PConstants.ENABLE_DEPTH_TEST);
+    app.popStyle();
   }
   
   void drawAxis(PApplet app, int drawMode) {

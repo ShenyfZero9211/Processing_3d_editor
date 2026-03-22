@@ -5,12 +5,16 @@ class Entity {
   Transform transform;
   boolean selected = false;
   color col = color(200);
+  Material material = new Material();
   Entity parent = null;
   ArrayList<Entity> children = new ArrayList<Entity>();
   
   // Point Light Specific Properties
   float lightIntensity = 1.0f;
   float lightRange = 300.0f;
+  
+  // v0.8.0: External Model Slot
+  PShape model = null;
   
   // v0.5.0: Events & Scripts mounting
   HashMap<String, ArrayList<String>> eventHandlers = new HashMap<String, ArrayList<String>>();
@@ -36,6 +40,7 @@ class Entity {
       java.awt.Color c = java.awt.Color.getHSBColor(h, 0.45f, 0.85f);
       this.col = color(c.getRed(), c.getGreen(), c.getBlue());
     }
+    this.material.albedo = this.col;
   }
   
   void setParent(Entity newParent, boolean preserveWorld) {
@@ -75,6 +80,7 @@ class Entity {
   }
   
   void render(PApplet app) {
+    app.pushStyle();
     app.pushMatrix();
     
     // Apply local transform
@@ -88,7 +94,37 @@ class Entity {
     app.specular(120);
     app.shininess(15.0f);
     
-    app.fill(selected ? color(255, 180, 0) : col);
+    if (type.equals("PointLight")) {
+      app.resetShader();
+      app.fill(selected ? color(255, 180, 0) : material.albedo);
+    } else {
+      if (p3deditor.this.pbrShader != null) {
+        float r = ((material.albedo >> 16) & 0xFF) / 255.0f;
+        float g = ((material.albedo >> 8) & 0xFF) / 255.0f;
+        float b = (material.albedo & 0xFF) / 255.0f;
+        p3deditor.this.pbrShader.set("albedo", r, g, b);
+        p3deditor.this.pbrShader.set("metallic", material.metallic);
+        p3deditor.this.pbrShader.set("roughness", material.roughness);
+        
+        // v0.8.5: Pass Model Matrix for World-Space IBL
+        PMatrix3D mm = getWorldMatrix();
+        p3deditor.this.pbrShader.set("modelMatrix", mm);
+        
+        // v0.8.0: Texture Maps support
+        if (material.hasAlbedoMap) p3deditor.this.pbrShader.set("albedoMap", material.albedoMap);
+        p3deditor.this.pbrShader.set("hasAlbedoMap", material.hasAlbedoMap);
+        
+        if (material.hasMetallicMap) p3deditor.this.pbrShader.set("metallicMap", material.metallicMap);
+        p3deditor.this.pbrShader.set("hasMetallicMap", material.hasMetallicMap);
+        
+        if (material.hasRoughnessMap) p3deditor.this.pbrShader.set("roughnessMap", material.roughnessMap);
+        p3deditor.this.pbrShader.set("hasRoughnessMap", material.hasRoughnessMap);
+        
+        app.shader(p3deditor.this.pbrShader);
+      }
+      app.fill(selected ? color(255, 180, 0) : material.albedo);
+    }
+
     if (selected) {
       app.stroke(255, 100, 0);
       app.strokeWeight(1.5f);
@@ -97,10 +133,13 @@ class Entity {
     }
     
     // Draw geometry
-    if (type.equals("Cube")) app.box(50);
-    else if (type.equals("Sphere")) { app.sphereDetail(30); app.sphere(30); }
-    else if (type.equals("Plane")) { app.box(100, 1, 100); }
-    else if (type.equals("PointLight")) {
+    if (model != null) {
+      app.shape(model);
+    } else {
+      if (type.equals("Cube")) app.box(50);
+      else if (type.equals("Sphere")) { app.sphereDetail(30); app.sphere(30); }
+      else if (type.equals("Plane")) { app.box(100, 1, 100); }
+      else if (type.equals("PointLight")) {
       app.noStroke();
       app.emissive(col);
       app.sphere(8);
@@ -112,14 +151,18 @@ class Entity {
           app.line(0,0,0, cos(a)*18, sin(a)*18, 0);
           app.line(0,0,0, 0, cos(a)*18, sin(a)*18);
         }
-        
-        // Visual Range Sphere
-        app.noFill();
-        app.stroke(col, 40);
-        app.strokeWeight(0.5f);
-        app.sphereDetail(16);
-        app.sphere(lightRange);
       }
+    }
+    }
+    
+    if (!type.equals("PointLight")) app.resetShader();
+    // Visual Range Sphere
+    if (type.equals("PointLight") && selected) { // Only draw range sphere if it's a selected PointLight
+      app.noFill();
+      app.stroke(col, 40);
+      app.strokeWeight(0.5f);
+      app.sphereDetail(16);
+      app.sphere(lightRange);
     }
     
     // Recursively render children
@@ -128,18 +171,11 @@ class Entity {
     }
     
     app.popMatrix();
+    app.popStyle();
   }
   
   PVector getWorldPosition() {
-    PVector pos = transform.position.copy();
-    Entity p = parent;
-    while (p != null) {
-      // Very naive version of world pos for now (just adding offsets)
-      // For full rotations/scales of parents, we'd need matrix multiplication
-      // Let's use Processing's matrix math for correctness:
-      return getWorldMatrix().mult(new PVector(0,0,0), new PVector());
-    }
-    return pos;
+    return getWorldMatrix().mult(new PVector(0,0,0), new PVector());
   }
   
   PMatrix3D getWorldMatrix() {

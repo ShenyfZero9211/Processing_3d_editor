@@ -12,6 +12,9 @@ class SceneManager {
   JSONArray sceneSnapshot = null;
   int snapshotNextId = 1;
   
+  // v0.8.0: Global IBL Environment Map
+  PImage envMap = null;
+  
   void saveSnapshot() {
     sceneSnapshot = new JSONArray();
     for (int i=0; i<entities.size(); i++) {
@@ -81,6 +84,51 @@ class SceneManager {
     }
   }
   
+  void updateShaderLights(PShader shader) {
+    if (shader == null) return;
+    
+    shader.set("cameraPos", p3deditor.this.editorCamera.pos);
+    
+    ArrayList<Entity> lights = new ArrayList<Entity>();
+    for (Entity e : entities) {
+      if (e.type.equals("PointLight")) lights.add(e);
+      if (lights.size() >= 5) break;
+    }
+    
+    float[] lPos = new float[lights.size() * 3];
+    float[] lCol = new float[lights.size() * 3];
+    
+    // Use the current modelview matrix to transform light positions into view space
+    PMatrix3D view = ((PGraphics3D)p3deditor.this.g).modelview;
+    
+    for (int i = 0; i < lights.size(); i++) {
+        Entity l = lights.get(i);
+        PVector wPos = l.getWorldPosition();
+        PVector vPos = new PVector();
+        view.mult(wPos, vPos);
+        
+        lPos[i*3 + 0] = vPos.x;
+        lPos[i*3 + 1] = vPos.y;
+        lPos[i*3 + 2] = vPos.z;
+        
+        lCol[i*3 + 0] = p3deditor.this.red(l.col) / 255.0f * l.lightIntensity;
+        lCol[i*3 + 1] = p3deditor.this.green(l.col) / 255.0f * l.lightIntensity;
+        lCol[i*3 + 2] = p3deditor.this.blue(l.col) / 255.0f * l.lightIntensity;
+    }
+    
+    p3deditor.this.pbrShader.set("lightPositions", lPos, 3);
+    p3deditor.this.pbrShader.set("lightColors", lCol, 3);
+    p3deditor.this.pbrShader.set("lightCount", lights.size());
+    
+    // v0.8.0: Environmental Lighting (IBL)
+    if (envMap != null) {
+      p3deditor.this.pbrShader.set("envMap", envMap);
+      p3deditor.this.pbrShader.set("hasEnvMap", true);
+    } else {
+      p3deditor.this.pbrShader.set("hasEnvMap", false);
+    }
+  }
+  
   void addEntityToSceneRecursive(Entity e) {
     if (e.id == -1) e.id = nextEntityId++;
     if (!entities.contains(e)) entities.add(e);
@@ -90,6 +138,7 @@ class SceneManager {
   }
   
   void render(PApplet app) {
+    updateShaderLights(p3deditor.this.pbrShader);
     // Note: Global lighting is now handled in p3deditor.draw() to respect the 8-light limit.
     
     // ONLY start rendering from root entities (hierarchical recursion handles children)

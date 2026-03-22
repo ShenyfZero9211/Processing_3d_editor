@@ -49,7 +49,7 @@ class UIManager {
   boolean isEditingText() { return activeEditTarget > 0; }
   
   void commitEdit() {
-    if (activeEditTarget == 14) {
+    if (activeEditTarget == 99) {
       debugConsole.addLog("> " + activeEditString, 0);
       consoleResult = interpreter.execute(activeEditString);
       if (consoleResult.startsWith("Error")) debugConsole.addLog(consoleResult, 3);
@@ -90,15 +90,36 @@ class UIManager {
         // Hex Color Support
         try { 
            String h = activeEditString.replace("#", "");
-           if (h.length() == 6) e.col = (int)Long.parseLong("FF" + h, 16);
+           if (h.length() == 6) {
+             e.col = (int)Long.parseLong("FF" + h, 16);
+             e.material.albedo = e.col;
+           }
         } catch(Exception ex) {}
       }
       else if (activeEditTarget == 12) e.lightIntensity = Float.parseFloat(activeEditString);
       else if (activeEditTarget == 13) e.lightRange = Float.parseFloat(activeEditString);
+      else if (activeEditTarget == 14) e.material.metallic = Float.parseFloat(activeEditString);
+      else if (activeEditTarget == 15) e.material.roughness = Float.parseFloat(activeEditString);
       
       scene.undoManager.push(new ValueEditCommand(scene, e, activeEditTarget, oldVal, activeEditString));
     } catch (Exception ex) {}
     activeEditTarget = 0;
+  }
+  
+  void handleStepperHit(Entity e, int id, int dir) {
+    if (id == 2) e.transform.position.x += dir * 1.0f;
+    else if (id == 3) e.transform.position.y += dir * 1.0f;
+    else if (id == 4) e.transform.position.z += dir * 1.0f;
+    else if (id == 5) e.transform.rotation.x += radians(dir * 5.0f);
+    else if (id == 6) e.transform.rotation.y += radians(dir * 5.0f);
+    else if (id == 7) e.transform.rotation.z += radians(dir * 5.0f);
+    else if (id == 8) e.transform.scale.x = max(0.1f, e.transform.scale.x + dir * 0.1f);
+    else if (id == 9) e.transform.scale.y = max(0.1f, e.transform.scale.y + dir * 0.1f);
+    else if (id == 10) e.transform.scale.z = max(0.1f, e.transform.scale.z + dir * 0.1f);
+    else if (id == 12) e.lightIntensity = max(0, e.lightIntensity + dir * 0.1f);
+    else if (id == 13) e.lightRange = max(10, e.lightRange + dir * 10.0f);
+    else if (id == 14) e.material.metallic = constrain(e.material.metallic + dir * 0.05f, 0, 1);
+    else if (id == 15) e.material.roughness = constrain(e.material.roughness + dir * 0.05f, 0, 1);
   }
   
   void handleTextEditKey() {
@@ -122,23 +143,74 @@ class UIManager {
   }
   
   void drawEditField(String label, String value, int id, float x, float y) {
-    fill(255);
-    textSize(12);
+    fill(200); textSize(11); text(label, x, y);
+    float labelW = 85; 
+    float boxX = x + labelW;
+    float boxW = (id == 1 || id == 11) ? 65 : 50;
+    
+    // Background for text input box
+    float ly = mouseY - inspectorScrollY;
+    boolean isHover = mouseX > boxX && mouseX < boxX + boxW && ly > y - 14 && ly < y + 4;
+    
     if (activeEditTarget == id) {
-      fill(255, 255, 0);
-      text(label + activeEditString + (frameCount % 60 < 30 ? "|" : ""), x, y);
+      fill(30, 40, 60); stroke(100, 150, 255); strokeWeight(1.5f);
+      rect(boxX, y - 14, boxW, 18, 3);
+      noStroke(); fill(255, 255, 0); textSize(11);
+      text(activeEditString + (frameCount % 60 < 30 ? "|" : ""), boxX + 5, y);
     } else {
-      float ly = mouseY - inspectorScrollY;
-      boolean isHover = mouseX > x - 5 && mouseX < x + 150 && ly > y - 14 && ly < y + 4;
-      if (isHover) {
-        strokeWeight(1); stroke(150, 200);
-        fill(200, 200, 255, 100);
-        rect(x - 5, y - 14, 150, 18, 3);
-      }
-      noStroke();
-      fill(isHover ? 255 : 200); // Brighten text on hover
-      text(label + value, x, y);
+      fill(35, 35, 40); stroke(isHover ? 100 : 50); strokeWeight(1);
+      rect(boxX, y - 14, boxW, 18, 3);
+      noStroke(); fill(isHover ? 255 : 180); textSize(11);
+      text(value, boxX + 5, y);
     }
+    
+    // Stepper Buttons (+/-) for numerical fields (Ignore Name:1, AlbedoHex:11)
+    if (id != 1 && id != 11) {
+      float btnX = boxX + boxW + 4;
+      drawStepperButton("-", btnX, y - 14, 18, 18);
+      drawStepperButton("+", btnX + 22, y - 14, 18, 18);
+    } else if (id == 11) {
+      // Pick Button for Albedo + Preview Swatch
+      float btnX = boxX + boxW + 4;
+      
+      // Color Preview Swatch
+      fill(p3deditor.this.scene.selectedEntities.get(0).material.albedo);
+      stroke(100); strokeWeight(1);
+      rect(btnX, y - 14, 18, 18, 3);
+      
+      drawStepperButton("Pick", btnX + 22, y - 14, 35, 18);
+    }
+  }
+
+  void drawStepperButton(String label, float x, float y, float w, float h) {
+    float ly = mouseY - inspectorScrollY;
+    boolean hover = mouseX > x && mouseX < x + w && ly > y && ly < y + h;
+    fill(hover ? 80 : 45); 
+    noStroke();
+    rect(x, y, w, h, 3);
+    fill(255); textAlign(CENTER, CENTER); textSize(10);
+    text(label, x + w/2, y + h/2 - 1);
+    textAlign(LEFT, BASELINE);
+  }
+
+  void drawMapButton(String label, float x, float y, Entity e, String type) {
+    boolean hasMap = false;
+    if (type.equals("albedo")) hasMap = e.material.hasAlbedoMap;
+    else if (type.equals("metallic")) hasMap = e.material.hasMetallicMap;
+    else if (type.equals("roughness")) hasMap = e.material.hasRoughnessMap;
+    
+    float ly = mouseY - inspectorScrollY;
+    boolean hover = mouseX > x && mouseX < x + 35 && ly > y && ly < y + 18;
+    
+    if (hasMap) fill(100, 200, 100); 
+    else if (hover) fill(80, 80, 100);
+    else fill(40, 40, 45);
+    
+    noStroke(); rect(x, y, 35, 18, 3);
+    
+    fill(255); textAlign(CENTER, CENTER); textSize(9);
+    text(hasMap ? "ON" : label, x + 17, y + 9);
+    textAlign(LEFT, BASELINE);
   }
 
   void render() {
@@ -274,11 +346,7 @@ class UIManager {
   }
   
   void renderMenuDropdown() {
-    String[] items = {};
-    if (activeMenu.equals("File")) items = new String[]{"New Scene", "Load Scene", "Save Scene", "Export"};
-    else if (activeMenu.equals("Edit")) items = new String[]{"Undo  [Ctrl+Z]", "Redo  [Ctrl+Y]", "Delete [Del]"};
-    else if (activeMenu.equals("Create")) items = new String[]{"Cube", "Sphere", "Plane", "Point Light"};
-    else if (activeMenu.equals("Window")) items = new String[]{"Toggle Console", "Toggle Stats", "Reset Camera"};
+    String[] items = getItemsForMenu(activeMenu);
     
     if (items.length == 0) { activeMenu = ""; return; }
     
@@ -329,7 +397,7 @@ class UIManager {
     text("> ", 15, yY + consoleH/2);
     
     // Current Input
-    if (activeEditTarget == 14) {
+    if (activeEditTarget == 99) {
       fill(255, 255, 0);
       text(activeEditString + (frameCount % 60 < 30 ? "_" : ""), 35, yY + consoleH/2);
     } else {
@@ -463,34 +531,37 @@ class UIManager {
       drawEditField("Z: ", String.format(java.util.Locale.US, "%.1f", e.transform.scale.z), 10, panelX + 25, 450);
       
       fill(180, 255, 180); text("Material", panelX + 15, 490);
-      drawEditField("Color (Hex): #", hex(e.col, 6), 11, panelX + 25, 515);
+      drawEditField("Albedo: #", hex(e.material.albedo, 6), 11, panelX + 25, 515);
       
-      // Color Swatches Palette
-      int[] swatches = {#FFFFFF, #FF0000, #00FF00, #0000FF, #FFFF00, #00FFFF, #FF00FF, #FFA500, #808080, #333333};
-      for(int i=0; i<swatches.length; i++) {
-        fill(swatches[i]);
-        rect(panelX + 25 + i*20, 530, 15, 15, 3);
-      }
+      float mapBtnX = panelX + 205;
+      drawMapButton("Map", mapBtnX, 501, e, "albedo");
+      
+      drawEditField("Metallic: ", String.format(java.util.Locale.US, "%.2f", e.material.metallic), 14, panelX + 25, 535);
+      drawMapButton("Map", mapBtnX, 521, e, "metallic");
+      
+      drawEditField("Roughness: ", String.format(java.util.Locale.US, "%.2f", e.material.roughness), 15, panelX + 25, 555);
+      drawMapButton("Map", mapBtnX, 541, e, "roughness");
+      
       if (e.type.equals("PointLight")) {
-        fill(180, 255, 180); text("Light Settings", panelX + 15, 570);
-        drawEditField("Intensity: ", String.format(java.util.Locale.US, "%.1f", e.lightIntensity), 12, panelX + 25, 595);
-        drawEditField("Range: ", String.format(java.util.Locale.US, "%.0f", e.lightRange), 13, panelX + 25, 615);
+        fill(180, 255, 180); text("Light Settings", panelX + 15, 585);
+        drawEditField("Intensity: ", String.format(java.util.Locale.US, "%.1f", e.lightIntensity), 12, panelX + 25, 610);
+        drawEditField("Range: ", String.format(java.util.Locale.US, "%.0f", e.lightRange), 13, panelX + 25, 630);
       }
       
       // v0.5.0: Events Section
-      fill(180, 180, 255); text("Events & Scripts", panelX + 15, 650);
+      fill(180, 180, 255); text("Events & Scripts", panelX + 15, 665);
       
       // Mount Script [+] Button
       float btnX = panelX + 130;
       float lyBtn = mouseY - inspectorScrollY;
-      boolean mountHover = mouseX > btnX && mouseX < btnX + 22 && lyBtn > 636 && lyBtn < 656;
+      boolean mountHover = mouseX > btnX && mouseX < btnX + 22 && lyBtn > 651 && lyBtn < 671;
       if (mountHover) fill(100, 150, 255); else fill(60, 60, 80);
-      rect(btnX, 636, 22, 20, 4);
-      fill(255); textAlign(CENTER, CENTER); textSize(14); text("+", btnX + 11, 645);
+      rect(btnX, 651, 22, 20, 4);
+      fill(255); textAlign(CENTER, CENTER); textSize(14); text("+", btnX + 11, 660);
       textAlign(LEFT, BASELINE);
       textSize(12);
       
-      float evtY = 675;
+      float evtY = 690;
       if (e.eventHandlers.isEmpty()) {
         fill(100); textSize(12); text("(No events mounted)", panelX + 25, evtY);
       } else {
@@ -556,6 +627,7 @@ class UIManager {
   }
   
   void renderContextMenu() {
+    p3deditor.this.hint(p3deditor.this.DISABLE_DEPTH_TEST);
     p3deditor.this.noClip();
     float w = 120;
     float h = 100;
@@ -645,7 +717,7 @@ class UIManager {
     }
     
     if (showUI && showConsole && mouseY > height - 30) {
-      activeEditTarget = 14; activeEditString = ""; 
+      activeEditTarget = 99; activeEditString = ""; 
       return true; 
     }
     
@@ -779,6 +851,13 @@ class UIManager {
       evtY += 5;
     }
     
+    float panelX = width - panelWidth;
+    float lX = panelX + 25; // Base X for fields in renderInspector
+    
+    // Helper lambda-like check for field hits
+    // id 1: 70, 2-4: 200,220,240, 5-7: 305,325,345, 8-10: 410,430,450, 11: 515, 14,15: 535,555
+    // 12,13: 610,630
+    
     if (iy > 55 && iy <= 75) { hitId = 1; startVal = e.name; }
     else if (iy > 185 && iy <= 205) { hitId = 2; startVal = String.format(java.util.Locale.US, "%.1f", e.transform.position.x); }
     else if (iy > 205 && iy <= 225) { hitId = 3; startVal = String.format(java.util.Locale.US, "%.1f", e.transform.position.y); }
@@ -789,19 +868,82 @@ class UIManager {
     else if (iy > 395 && iy <= 415) { hitId = 8; startVal = String.format(java.util.Locale.US, "%.1f", e.transform.scale.x); }
     else if (iy > 415 && iy <= 435) { hitId = 9; startVal = String.format(java.util.Locale.US, "%.1f", e.transform.scale.y); }
     else if (iy > 435 && iy <= 455) { hitId = 10; startVal = String.format(java.util.Locale.US, "%.1f", e.transform.scale.z); }
-    else if (iy > 500 && iy <= 525) { hitId = 11; startVal = hex(e.col, 6); }
-    else if (iy > 530 && iy <= 545) {
-      // Swatch Click
-      int[] swatches = {#FFFFFF, #FF0000, #00FF00, #0000FF, #FFFF00, #00FFFF, #FF00FF, #FFA500, #808080, #333333};
-      int swatchIdx = (mouseX - (width-panelWidth+25)) / 20;
-      if (swatchIdx >= 0 && swatchIdx < swatches.length) {
-        e.col = color(red(swatches[swatchIdx]), green(swatches[swatchIdx]), blue(swatches[swatchIdx]));
+    else if (iy > 495 && iy <= 525) { 
+       // Check if clicked the "Pick" button instead of the hex box
+       float boxX = lX + 85;
+       float boxW = 65;
+       float pickBtnX = boxX + boxW + 4; 
+       if (mouseX > pickBtnX && mouseX < pickBtnX + 20) {
+         final Entity targetE = e;
+         new Thread(new Runnable() {
+           public void run() {
+             java.awt.Color initial = new java.awt.Color((int)p3deditor.this.red(targetE.material.albedo), (int)p3deditor.this.green(targetE.material.albedo), (int)p3deditor.this.blue(targetE.material.albedo));
+             
+             // Create a non-blocking dialog that stays on top
+             javax.swing.JColorChooser chooser = new javax.swing.JColorChooser(initial);
+             javax.swing.JDialog dialog = javax.swing.JColorChooser.createDialog(null, "Select Albedo Color", false, chooser, 
+               new java.awt.event.ActionListener() {
+                 public void actionPerformed(java.awt.event.ActionEvent e) {
+                   java.awt.Color selected = chooser.getColor();
+                   if (selected != null) {
+                     targetE.material.albedo = color(selected.getRed(), selected.getGreen(), selected.getBlue());
+                     targetE.col = targetE.material.albedo;
+                   }
+                 }
+               }, null);
+             dialog.setAlwaysOnTop(true);
+             dialog.setVisible(true);
+           }
+         }).start();
+         return;
+       }
+       hitId = 11; startVal = hex(e.material.albedo, 6); 
+    }
+    else if (iy > 525 && iy <= 545) { hitId = 14; startVal = String.format(java.util.Locale.US, "%.2f", e.material.metallic); }
+    else if (iy > 545 && iy <= 565) { hitId = 15; startVal = String.format(java.util.Locale.US, "%.2f", e.material.roughness); }
+    
+    // Check Map Buttons
+    float mapBtnX = (width - panelWidth) + 205;
+    if (mouseX > mapBtnX && mouseX < mapBtnX + 65) {
+      boolean isToggle = mouseX > mapBtnX + 38;
+      
+      if (iy > 501 && iy < 519) {
+        if (isToggle) e.material.hasAlbedoMap = !e.material.hasAlbedoMap;
+        else {
+          p3deditor.this.scriptMountTarget = e; 
+          p3deditor.this.selectInput("Select Albedo Texture:", "albedoMapSelected");
+        }
+        return;
+      }
+      if (iy > 521 && iy < 539) {
+        if (isToggle) e.material.hasMetallicMap = !e.material.hasMetallicMap;
+        else {
+          p3deditor.this.scriptMountTarget = e; 
+          p3deditor.this.selectInput("Select Metallic Texture:", "metallicMapSelected");
+        }
+        return;
+      }
+      if (iy > 541 && iy < 559) {
+        if (isToggle) e.material.hasRoughnessMap = !e.material.hasRoughnessMap;
+        else {
+          p3deditor.this.scriptMountTarget = e; 
+          p3deditor.this.selectInput("Select Roughness Texture:", "roughnessMapSelected");
+        }
         return;
       }
     }
     else if (e.type.equals("PointLight")) {
-       if (iy > 580 && iy <= 600) { hitId = 12; startVal = String.format(java.util.Locale.US, "%.1f", e.lightIntensity); }
-       else if (iy > 600 && iy <= 620) { hitId = 13; startVal = String.format(java.util.Locale.US, "%.0f", e.lightRange); }
+       if (iy > 600 && iy <= 620) { hitId = 12; startVal = String.format(java.util.Locale.US, "%.1f", e.lightIntensity); }
+       else if (iy > 620 && iy <= 640) { hitId = 13; startVal = String.format(java.util.Locale.US, "%.0f", e.lightRange); }
+    }
+    
+    // Process Stepper Hits
+    if (hitId > 1 && hitId != 11) {
+       float boxX = lX + 85;
+       float boxW = (hitId == 1) ? 65 : 50; // Although hitId 1 is Name, handled separately
+       float btnX = boxX + boxW + 4;
+       if (mouseX > btnX && mouseX < btnX + 18) { handleStepperHit(e, hitId, -1); return; }
+       if (mouseX > btnX + 22 && mouseX < btnX + 40) { handleStepperHit(e, hitId, 1); return; }
     }
     
     if (hitId > 0) { activeEditTarget = hitId; activeEditString = startVal; }
@@ -908,9 +1050,9 @@ class UIManager {
   }
   
   String[] getItemsForMenu(String menu) {
-    if (menu.equals("File")) return new String[]{"New Scene", "Load Scene", "Save Scene"};
+    if (menu.equals("File")) return new String[]{"New Scene", "Load Scene", "Save Scene", "Load Env Map"};
     else if (menu.equals("Edit")) return new String[]{"Undo  [Ctrl+Z]", "Redo  [Ctrl+Y]", "Delete [Del]"};
-    else if (menu.equals("Create")) return new String[]{"Cube", "Sphere", "Plane", "Point Light"};
+    else if (menu.equals("Create")) return new String[]{"Cube", "Sphere", "Plane", "Point Light", "Import OBJ"};
     else if (menu.equals("Window")) return new String[]{"Toggle Console", "Toggle Stats", "Reset Camera"};
     return new String[]{};
   }
@@ -932,10 +1074,12 @@ class UIManager {
     } else if (item.contains("Load Scene")) {
       selectInput("Load Scene:", "fileSelectedForLoad");
     } else if (item.contains("Save Scene")) {
-      selectOutput("Save Scene:", "fileSelectedForSave");
+      p3deditor.this.selectOutput("Save Scene:", "fileSelectedForSave");
     } else if (item.contains("Export")) {
        saveFrame("exports/screenshot-####.png");
        consoleResult = "SUCCESS: Exported screenshot";
+    } else if (item.contains("Load Env Map")) {
+      p3deditor.this.selectInput("Select Global Environment Map:", "envMapSelected");
     } else if (item.contains("Undo")) {
       scene.undoManager.undo();
     } else if (item.contains("Redo")) {
@@ -952,11 +1096,21 @@ class UIManager {
       scene.addEntity("Plane", "Plane");
       debugConsole.addLog("Created Plane", 0);
     } else if (item.equals("Point Light")) {
-      scene.addEntity("Point Light", "PointLight");
-      debugConsole.addLog("Created PointLight", 0);
+      int count = 0;
+      for(Entity e : scene.entities) if(e.type.equals("PointLight")) count++;
+      if (count < 5) {
+        scene.addEntity("Point Light", "PointLight");
+        debugConsole.addLog("Created PointLight", 0);
+      }
+    } else if (item.contains("Import OBJ")) {
+      Entity ne = new Entity(scene.nextEntityId++, "Model", "Model");
+      scene.entities.add(ne);
+      scene.selectEntity(ne, false);
+      p3deditor.this.scriptMountTarget = ne;
+      p3deditor.this.selectInput("Select OBJ Model:", "modelSelected");
     } else if (item.contains("Console")) {
       showConsole = !showConsole;
-      if (!showConsole && activeEditTarget == 14) activeEditTarget = 0;
+      if (!showConsole && activeEditTarget == 99) activeEditTarget = 0;
     } else if (item.contains("Stats")) {
       showStats = !showStats;
     } else if (item.contains("Reset Camera")) {
@@ -974,9 +1128,23 @@ class UIManager {
   }
   
   void handleKeyPressed() {
+    // If we're editing an inspector field (not the console), prioritize it and block console keys (except backtick)
+    if (isEditingText() && activeEditTarget != 99) {
+      if (key == '`') { debugConsole.handleKey(key, keyCode); return; } // Allow console toggle
+      handleTextEditKey();
+      return;
+    }
+    
+    // Otherwise, handle console keys first
     debugConsole.handleKey(key, keyCode);
     
-    // Fallback: If console is not active and not editing inspector, allow shortcuts like Delete
+    // If the console is the active edit target, handle its typing
+    if (activeEditTarget == 99) {
+      handleTextEditKey();
+      return;
+    }
+    
+    // Fallback shortcuts
     if (!debugConsole.active && !isEditingText()) {
       boolean isDelete = (keyCode == DELETE || key == DELETE || key == 127);
       boolean isBackspace = (key == BACKSPACE || key == 8);

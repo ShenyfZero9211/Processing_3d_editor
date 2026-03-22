@@ -73,6 +73,7 @@ class CommandInterpreter {
         String hexStr = parts.get(2).replace("#", "");
         if (hexStr.length() == 6) {
           e.col = (int)Long.parseLong("FF" + hexStr, 16);
+          e.material.albedo = e.col;
           return "SUCCESS: Colored " + e.name;
         }
         return "Error: Invalid hex format";
@@ -88,6 +89,20 @@ class CommandInterpreter {
           e.transform.scale.set(float(parts.get(2)), float(parts.get(3)), float(parts.get(4)));
         }
         return "SUCCESS: Scaled " + e.name;
+      }
+      else if (rawCmd.equals("metallic") || rawCmd.equals("metal")) {
+        if (parts.size() < 3) return "Error: metal <name> <val>";
+        Entity e = findEntity(parts.get(1));
+        if (e == null) return "Error: Entity not found: " + parts.get(1);
+        e.material.metallic = float(parts.get(2));
+        return "SUCCESS: Set metallic of " + e.name + " to " + e.material.metallic;
+      }
+      else if (rawCmd.equals("roughness") || rawCmd.equals("rough")) {
+        if (parts.size() < 3) return "Error: rough <name> <val>";
+        Entity e = findEntity(parts.get(1));
+        if (e == null) return "Error: Entity not found: " + parts.get(1);
+        e.material.roughness = float(parts.get(2));
+        return "SUCCESS: Set roughness of " + e.name + " to " + e.material.roughness;
       }
       else if (rawCmd.equals("delete") || rawCmd.equals("remove")) {
         if (parts.size() < 2) return "Error: delete <name>";
@@ -236,8 +251,42 @@ class CommandInterpreter {
         p3deditor.this.oscTelemetryEnabled = parts.get(1).equalsIgnoreCase("on");
         return "SUCCESS: OSC Telemetry is now " + (p3deditor.this.oscTelemetryEnabled ? "ON" : "OFF");
       }
+      else if (rawCmd.equals("load_obj")) {
+        if (parts.size() < 3) return "Error: load_obj <name> <path>";
+        Entity e = findEntity(parts.get(1));
+        if (e == null) return "Error: Entity not found: " + parts.get(1);
+        e.model = p3deditor.this.loadShape(parts.get(2));
+        e.type = "Model";
+        return "SUCCESS: Loaded model into " + e.name;
+      }
+      else if (rawCmd.equals("load_env")) {
+        if (parts.size() < 2) return "Error: load_env <path>";
+        scene.envMap = p3deditor.this.loadImage(parts.get(1));
+        return "SUCCESS: Loaded Global Environment Map: " + parts.get(1);
+      }
+      else if (rawCmd.equals("load_albedo")) {
+        if (parts.size() < 3) return "Error: load_albedo <name> <path>";
+        Entity e = findEntity(parts.get(1));
+        if (e == null) return "Error: Entity not found: " + parts.get(1);
+        e.material.setAlbedoMap(p3deditor.this.loadImage(parts.get(2)));
+        return "SUCCESS: Loaded Albedo Map into " + e.name;
+      }
+      else if (rawCmd.equals("load_metal")) {
+        if (parts.size() < 3) return "Error: load_metal <name> <path>";
+        Entity e = findEntity(parts.get(1));
+        if (e == null) return "Error: Entity not found: " + parts.get(1);
+        e.material.setMetallicMap(p3deditor.this.loadImage(parts.get(2)));
+        return "SUCCESS: Loaded Metallic Map into " + e.name;
+      }
+      else if (rawCmd.equals("load_rough")) {
+        if (parts.size() < 3) return "Error: load_rough <name> <path>";
+        Entity e = findEntity(parts.get(1));
+        if (e == null) return "Error: Entity not found: " + parts.get(1);
+        e.material.setRoughnessMap(p3deditor.this.loadImage(parts.get(2)));
+        return "SUCCESS: Loaded Roughness Map into " + e.name;
+      }
       else if (rawCmd.equals("help")) {
-        return "CMDS: move, tp, color, scale, delete, rename, clear, echo, play, stop, mount, unmount, alias, unalias, exec, run, osc_connect, osc_send, osc_telemetry, help";
+        return "CMDS: move, tp, color, scale, delete, rename, clear, create, metal, rough, load_obj, load_env, load_albedo, mount, osc_connect, play, help";
       }
     } catch (Exception ex) {
       return "Error: " + ex.getMessage();
