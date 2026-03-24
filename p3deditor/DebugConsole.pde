@@ -78,8 +78,10 @@ class DebugConsole {
     if (!active) return;
     
     p3deditor.this.pushStyle();
+    p3deditor.this.hint(p3deditor.this.DISABLE_DEPTH_TEST);
+    p3deditor.this.resetShader();
     // 1. Semi-transparent glass overlay (top half)
-    p3deditor.this.fill(20, 20, 25, 230);
+    p3deditor.this.fill(25, 25, 28, 230); // 230 for transparency test
     p3deditor.this.noStroke();
     p3deditor.this.rect(0, 0, p3deditor.this.width, p3deditor.this.height/2);
     p3deditor.this.stroke(100);

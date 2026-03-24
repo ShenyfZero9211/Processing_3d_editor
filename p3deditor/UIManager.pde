@@ -1,5 +1,6 @@
 class UIManager {
   SceneManager scene;
+  BlueprintEditor vlbEditor; // v0.9.0
   int panelWidth = 250;
   float scrollY = 0;
   float totalContentHeight = 0;
@@ -37,9 +38,10 @@ class UIManager {
     HierarchyItemRect(Entity e, float y) { this.entity = e; this.y = y; }
   }
   
-  UIManager(SceneManager scene, CommandInterpreter interpreter) {
+  UIManager(SceneManager scene, CommandInterpreter interpreter, BlueprintEditor vlbEditor) {
     this.scene = scene;
     this.interpreter = interpreter;
+    this.vlbEditor = vlbEditor;
     this.debugConsole = new DebugConsole(interpreter);
     
     // Auto-run startup script if it exists
@@ -251,16 +253,17 @@ class UIManager {
   }
   
   void renderHierarchy() {
+    p3deditor.this.hint(p3deditor.this.DISABLE_DEPTH_TEST);
+    p3deditor.this.resetShader();
     int listTopY = floor(menuBarHeight + 40); 
     int listBottomY = height - 30; // Leave space for Console
-    
     pushStyle();
     // Sidebar Main Plate
-    fill(25, 25, 28, 250); noStroke(); 
+    fill(25, 25, 28, 230); noStroke(); 
     rect(0, menuBarHeight, panelWidth, height - menuBarHeight);
     
     // Header Area
-    fill(20, 20, 22, 250); noStroke();
+    fill(20, 20, 22, 230); noStroke();
     rect(0, menuBarHeight, panelWidth, 30);
     fill(180); textSize(11); textAlign(LEFT, CENTER);
     text("Hierarchy", 15, menuBarHeight + 15);
@@ -360,7 +363,7 @@ class UIManager {
     pushStyle();
     float w = 150;
     float h = items.length * 28 + 10;
-    fill(35, 35, 40, 250); stroke(80);
+    fill(35, 35, 40, 230); stroke(80);
     rect(x, menuBarHeight, w, h, 4);
     
     for (int i = 0; i < items.length; i++) {
@@ -381,6 +384,8 @@ class UIManager {
   }
   
   void renderConsole() {
+    p3deditor.this.hint(p3deditor.this.DISABLE_DEPTH_TEST);
+    p3deditor.this.resetShader();
     pushStyle();
     float consoleH = 30;
     float yY = height - consoleH;
@@ -488,15 +493,17 @@ class UIManager {
   }
 
   void renderInspector() {
+    p3deditor.this.hint(p3deditor.this.DISABLE_DEPTH_TEST);
+    p3deditor.this.resetShader();
     if (scene.selectedEntities.isEmpty()) return;
     float panelX = width - panelWidth;
     pushStyle();
     // Sidebar Main Plate
-    fill(25, 25, 28, 250); noStroke(); 
+    fill(25, 25, 28, 230); noStroke(); 
     rect(panelX, menuBarHeight, panelWidth, height - menuBarHeight);
     
     // Header Area
-    fill(20, 20, 22, 250); noStroke(); 
+    fill(20, 20, 22, 230); noStroke(); 
     rect(panelX, menuBarHeight, panelWidth, 30);
     fill(180); textSize(11); textAlign(LEFT, CENTER);
     text("Inspector", panelX + 15, menuBarHeight + 15);
@@ -514,7 +521,20 @@ class UIManager {
     if (scene.selectedEntities.size() == 1) {
       Entity e = scene.selectedEntities.get(0);
       drawEditField("Name: ", e.name, 1, panelX + 15, 70);
-      fill(255); textSize(12); text("Type: " + e.type, panelX + 15, 95); text("ID: " + e.id, panelX + 15, 120);
+      fill(255); textSize(12); text("Type: " + e.type, panelX + 15, 95); 
+      
+      // v1.5: Visibility Toggle (Checkbox)
+      float toggleX = panelX + 130;
+      float toggleY = 82;
+      stroke(100); noFill();
+      rect(toggleX, toggleY, 14, 14, 2);
+      if (e.visible) {
+        fill(100, 255, 100); noStroke();
+        rect(toggleX + 3, toggleY + 3, 8, 8, 1);
+      }
+      fill(150); textSize(11); text("Visible", toggleX + 20, toggleY + 11);
+      
+      fill(255); textSize(12); text("ID: " + e.id, panelX + 15, 120);
       if (e.parent != null) fill(150, 200, 255); else fill(150);
       text("Parent: " + (e.parent != null ? e.parent.name : "None"), panelX + 15, 140);
       fill(180, 255, 180); text("Position (Local)", panelX + 15, 175);
@@ -586,7 +606,19 @@ class UIManager {
           evtY += 5;
         }
       }
-      inspectorTotalHeight = evtY + 50;
+      
+      // v0.9.0: Blueprint Section
+      fill(180, 180, 255); text("Blueprint Logic", panelX + 15, evtY + 30);
+      float bpBtnY = evtY + 45;
+      float bpBtnW = 100;
+      boolean bpHover = mouseX > panelX + 25 && mouseX < panelX + 25 + bpBtnW && (mouseY - inspectorScrollY) > bpBtnY && (mouseY - inspectorScrollY) < bpBtnY + 20;
+      if (bpHover) fill(100, 120, 200); else fill(45, 45, 55);
+      rect(panelX + 25, bpBtnY, bpBtnW, 20, 4);
+      fill(255); textAlign(CENTER, CENTER); textSize(10);
+      text("Edit Blueprint", panelX + 25 + bpBtnW/2, bpBtnY + 10);
+      textAlign(LEFT, BASELINE);
+      
+      inspectorTotalHeight = bpBtnY + 40;
     } else {
       fill(255); textSize(14); text(scene.selectedEntities.size() + " Objects Selected", panelX + 15, 70);
       inspectorTotalHeight = 100;
@@ -721,23 +753,32 @@ class UIManager {
       return true; 
     }
     
-    pX = width - panelWidth;
     if (mouseX > pX) {
+      activeEditTarget = -1; // Deselect any active field if clicking background 
+      
       // 3. Inspector Scrollbar Hit Test
-      if (inspectorTotalHeight > height && mouseX > width - 20) {
-        float listHeight = height;
+      if (inspectorTotalHeight > (height - menuBarHeight - 60) && mouseX > width - 20) {
+        float listHeight = height - menuBarHeight - 60;
         float thumbHeight = max(20, listHeight * (listHeight / inspectorTotalHeight));
         float maxScroll = inspectorTotalHeight - listHeight;
-        float thumbYPos = (-inspectorScrollY/maxScroll)*(listHeight-thumbHeight);
+        float thumbYPos = menuBarHeight + 30 + (-inspectorScrollY/maxScroll)*(listHeight-thumbHeight);
+        
         if (mouseY >= thumbYPos && mouseY <= thumbYPos + thumbHeight) {
           isDraggingInspectorScroll = true; inspectorDragThumbY = mouseY - thumbYPos;
         } else {
-          float newThumbTop = constrain(mouseY - thumbHeight/2.0f, 0, listHeight - thumbHeight);
+          float newThumbTop = constrain(mouseY - menuBarHeight - 30 - thumbHeight/2.0f, 0, listHeight - thumbHeight);
           inspectorScrollY = -((newThumbTop / (listHeight - thumbHeight)) * maxScroll);
           isDraggingInspectorScroll = true; inspectorDragThumbY = thumbHeight/2.0f;
         }
         return true;
       }
+      
+      // 4. Inspector Widget Clicks (Buttons, Fields) - MUST be checked before returning true
+      if (!scene.selectedEntities.isEmpty()) {
+        checkInspectorClicks();
+      }
+      
+      return true; // BREAK: Block all scene interaction through the Inspector panel
     }
     
     if (mouseX < panelWidth || mouseX > pX) {
@@ -799,9 +840,31 @@ class UIManager {
     
     // Account for scrolling
     float iy = mouseY - inspectorScrollY;
+    float inspX = width - panelWidth;
+    
+    // Check Visibility Toggle Hit (v1.5)
+    if (iy > 82 && iy < 96 && mouseX > inspX + 130 && mouseX < inspX + 130 + 14) {
+      e.visible = !e.visible;
+      return;
+    }
+
+    // v0.9.0: Blueprint Editor Button Hit (Check early, using standard for loop for safety)
+    Object[] handlerKeys = e.eventHandlers.keySet().toArray();
+    float currentEvtY = 690;
+    for (int i = 0; i < handlerKeys.length; i++) {
+        String k = (String)handlerKeys[i];
+        currentEvtY += 15 + (e.eventHandlers.get(k).size() * 15) + 5;
+    }
+    float hitBtnY = currentEvtY + 45;
+    if (mouseX > inspX + 25 && mouseX < inspX + 25 + 100 && iy > hitBtnY && iy < hitBtnY + 20) {
+        Blueprint bpToOpen = e.blueprint;
+        this.vlbEditor.activeBlueprint = bpToOpen;
+        this.vlbEditor.visible = true;
+        return;
+    }
     
     // Check Event Script Mount [+] Button
-    if (iy > 636 && iy < 656) {
+    if (iy > 651 && iy < 671) {
       float btnX = (width - panelWidth) + 130;
       if (mouseX > btnX && mouseX < btnX + 22) {
         final Entity targetEnt = e;
@@ -830,7 +893,7 @@ class UIManager {
     }
     
     // Check Unmount [X] Buttons
-    float evtY = 675;
+    float evtY = 690;
     ArrayList<String> sortedTypes = new ArrayList<String>(e.eventHandlers.keySet());
     java.util.Collections.sort(sortedTypes);
     for (String evtType : sortedTypes) {
@@ -851,8 +914,7 @@ class UIManager {
       evtY += 5;
     }
     
-    float panelX = width - panelWidth;
-    float lX = panelX + 25; // Base X for fields in renderInspector
+    float lX = inspX + 25; // Base X for fields in renderInspector
     
     // Helper lambda-like check for field hits
     // id 1: 70, 2-4: 200,220,240, 5-7: 305,325,345, 8-10: 410,430,450, 11: 515, 14,15: 535,555
@@ -926,8 +988,8 @@ class UIManager {
       if (iy > 541 && iy < 559) {
         if (isToggle) e.material.hasRoughnessMap = !e.material.hasRoughnessMap;
         else {
-          p3deditor.this.scriptMountTarget = e; 
-          p3deditor.this.selectInput("Select Roughness Texture:", "roughnessMapSelected");
+          scriptMountTarget = e; 
+          selectInput("Select Roughness Texture:", "roughnessMapSelected");
         }
         return;
       }
@@ -1154,26 +1216,35 @@ class UIManager {
     }
   }
   
-  void handleMouseWheel(float e) {
+  boolean handleMouseWheel(float e) {
     if (mouseX < panelWidth) {
       // Hierarchy Scroll
-      int listTopY = 50; int listBottomY = height - 120;
+      int listTopY = floor(menuBarHeight + 30); 
+      int listBottomY = height - 30;
       float listHeight = listBottomY - listTopY;
       if (totalContentHeight > listHeight) {
         float maxScroll = totalContentHeight - listHeight;
         scrollY -= e * 30;
         scrollY = constrain(scrollY, -maxScroll, 0);
       }
+      return true;
     } else if (mouseX > width - panelWidth) {
       // Inspector Scroll
-      float listHeight = height;
+      float listHeight = height - menuBarHeight - 60;
       if (inspectorTotalHeight > listHeight) {
         float maxScroll = inspectorTotalHeight - listHeight;
         inspectorScrollY -= e * 30;
         inspectorScrollY = constrain(inspectorScrollY, -maxScroll, 0);
       }
+      return true;
     }
-    debugConsole.handleMouseWheel(e);
+    
+    if (debugConsole.active && mouseY < height/2) {
+      debugConsole.handleMouseWheel(e);
+      return true;
+    }
+    
+    return false;
   }
   
   void renderViewportStatus() {

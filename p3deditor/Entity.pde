@@ -8,6 +8,11 @@ class Entity {
   Material material = new Material();
   Entity parent = null;
   ArrayList<Entity> children = new ArrayList<Entity>();
+  Blueprint blueprint; // v0.9.0 Visual Logic Blueprint
+  String blueprintPDES = ""; // v0.9.4: Cached PDES logic (legacy/Start)
+  HashMap<String, String> blueprintEventPDES = new HashMap<String, String>(); // v1.3: Per-event PDES
+  
+  public boolean visible = true; // v1.5: Rendering toggle
   
   // Point Light Specific Properties
   float lightIntensity = 1.0f;
@@ -41,6 +46,7 @@ class Entity {
       this.col = color(c.getRed(), c.getGreen(), c.getBlue());
     }
     this.material.albedo = this.col;
+    this.blueprint = new Blueprint(this);
   }
   
   void setParent(Entity newParent, boolean preserveWorld) {
@@ -80,6 +86,7 @@ class Entity {
   }
   
   void render(PApplet app) {
+    if (!visible) return;
     app.pushStyle();
     app.pushMatrix();
     

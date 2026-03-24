@@ -10,6 +10,7 @@ UIManager ui;
 Raycaster raycaster;
 CommandInterpreter interpreter;
 ScriptManager scriptManager;
+BlueprintEditor vlbEditor; // v0.9.0
 PFont mainFont;
 Robot robot;
 
@@ -82,7 +83,8 @@ void setup() {
   scene = new SceneManager();
   interpreter = new CommandInterpreter(scene);
   editorCamera = new EditorCamera();
-  ui = new UIManager(scene, interpreter);
+  vlbEditor = new BlueprintEditor(); // v0.9.0
+  ui = new UIManager(scene, interpreter, vlbEditor);
   raycaster = new Raycaster();
   
   scriptManager = new ScriptManager(interpreter);
@@ -114,7 +116,7 @@ void draw() {
   
   int lightCount = 0;
   for (Entity e : scene.entities) {
-    if (e.type.equals("PointLight")) {
+    if (e.type.equals("PointLight") && e.visible) {
       if (lightCount < 5) {
         PVector p = e.getWorldPosition();
         float r = red(e.col) * e.lightIntensity;
@@ -161,10 +163,17 @@ void draw() {
   }
   // =======================================================
   
-  // UI Layer
+  // UI Layer (Enforce absolute priority)
   camera(); 
   hint(DISABLE_DEPTH_TEST);
-  noLights(); // Prevents 3D scene lighting from tinting the 2D text!
+  resetShader();
+  noLights(); 
+  
+  // v0.9.6: Explicitly clear depth to ensure no 3D elements can ever overlay the UI
+  // Note: background() was already called, but if shaders messed with depth, we ensure it's clean for the HUD pass.
+  // We can't use clearDepth() directly so we rely on the hint and drawing order.
+  // To be bulletproof, we reset the style as well.
+  pushStyle();
   
 
   
@@ -196,13 +205,22 @@ void draw() {
     ui.renderOverlayInstructions();
   }
   
+  // vlbEditor also needs its own state protection
+  hint(DISABLE_DEPTH_TEST);
+  resetShader();
+  vlbEditor.render();
+  
+  popStyle(); // End HUD style protection
+  
   // v0.5.0: Play Mode Indicator (Colored Border & Status)
   if (scene.isRuntime) {
+    pushStyle();
     camera(); hint(DISABLE_DEPTH_TEST); noLights();
     stroke(#4285F4, 200); strokeWeight(10); noFill();
     rect(0, 0, width, height);
     fill(#4285F4); textSize(24); textAlign(CENTER, TOP);
     text("RUNNING (PLAY MODE)", width/2, 45);
+    popStyle();
     
     // --- EVALUATE FRAME-BASED RUNTIME EVENTS ---
     Ray ray = raycaster.getPickRay(mouseX, mouseY, width, height, savedProj, savedView);
@@ -215,15 +233,27 @@ void draw() {
     }
     
     for (Entity e : scene.entities) {
+       // v1.3: VLB OnUpdate blueprint trigger
+       if (e.blueprintEventPDES.containsKey("OnUpdate")) {
+         String vlbScript = "VLB_OnUpdate_" + e.name;
+         if (!scriptManager.isEntityExecuting(e, vlbScript)) {
+           scriptManager.runScript(vlbScript, e.blueprintEventPDES.get("OnUpdate"), e);
+         }
+       }
        if (e.eventHandlers.containsKey("Update")) {
-          // Because triggerEvent launches all scripts via scriptManager.runScript, 
-          // we need to only trigger it if they are NOT already running.
           for (String scriptPath : e.eventHandlers.get("Update")) {
              if (!scriptManager.isEntityExecuting(e, scriptPath)) {
                 String[] sLines = loadStrings(scriptPath);
                 if (sLines != null) scriptManager.runScript(scriptPath, join(sLines, "\n"), e);
              }
           }
+       }
+       // v1.3: VLB OnKeyPress blueprint trigger
+       if (keyPressed && e.blueprintEventPDES.containsKey("OnKeyPress")) {
+         String vlbScript = "VLB_OnKeyPress_" + e.name;
+         if (!scriptManager.isEntityExecuting(e, vlbScript)) {
+           scriptManager.runScript(vlbScript, e.blueprintEventPDES.get("OnKeyPress"), e);
+         }
        }
     }
   }
@@ -262,6 +292,10 @@ void drawGrid() {
 
 // Global input routing to UI or Camera
 void mousePressed() {
+  if (vlbEditor.visible) {
+    vlbEditor.handleMousePressed();
+    return;
+  }
   if (ui.debugConsole.active) return;
   
   if (showUI) {
@@ -385,6 +419,10 @@ void setupDrag() {
 }
 
 void mouseDragged() {
+  if (vlbEditor.visible) {
+    vlbEditor.handleMouseDragged();
+    return;
+  }
   if (ui.debugConsole.active) return;
   if (showUI) ui.handleMouseDragged();
   
@@ -545,6 +583,10 @@ PVector worldToScreen(PVector w) {
 }
 
 void mouseReleased() {
+  if (vlbEditor.visible) {
+    vlbEditor.handleMouseReleased();
+    return;
+  }
   if (ui.debugConsole.active) return;
   if (showUI) ui.handleMouseReleased();
   
@@ -594,25 +636,24 @@ void mouseReleased() {
 }
 
 void mouseWheel(MouseEvent event) {
-  if (showUI && ui.debugConsole.active) {
-    ui.handleMouseWheel(event.getCount());
+  if (vlbEditor.visible) {
+    vlbEditor.handleMouseWheel(event.getCount());
     return;
   }
-  if (ui.debugConsole.active) return;
   
-  if (showUI && mouseX < 250) {
-    ui.scrollY += event.getCount() * -20;
-    ui.scrollY = min(0, ui.scrollY); // lock top
-    
-    int listHeight = height - 120 - 50;
-    float maxScroll = -max(0, scene.entities.size() * 30 - listHeight);
-    ui.scrollY = max(maxScroll, ui.scrollY); // lock bottom
-    return;
+  if (showUI) {
+    if (ui.handleMouseWheel(event.getCount())) return;
   }
+  
   editorCamera.handleMouseWheel(event);
 }
 
 void keyPressed() {
+  if (vlbEditor.visible) {
+    vlbEditor.handleKeyPressed(key, keyCode);
+    if (key == ESC) { vlbEditor.visible = false; key = 0; }
+    return;
+  }
   // 1. Debug Console has absolute priority
   if (ui.debugConsole.active) {
     ui.handleKeyPressed();

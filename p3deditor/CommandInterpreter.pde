@@ -62,8 +62,9 @@ class CommandInterpreter {
       else if (rawCmd.equals("tp") || rawCmd.equals("set_pos")) {
         if (parts.size() < 5) return "Error: tp <name> <x> <y> <z>";
         Entity e = findEntity(parts.get(1));
-        if (e == null) return "Error: Entity not found: " + parts.get(1);
         e.transform.position.set(float(parts.get(2)), float(parts.get(3)), float(parts.get(4)));
+        // v1.8 debug: Log execution to check values
+        p3deditor.this.ui.debugConsole.addLog("PDES Trace: tp " + e.name + " to " + parts.get(2) + " (actual: " + e.transform.position.x + ")", 1);
         return "SUCCESS: Teleported " + e.name;
       }
       else if (rawCmd.equals("color") || rawCmd.equals("set_color")) {
@@ -104,6 +105,31 @@ class CommandInterpreter {
         e.material.roughness = float(parts.get(2));
         return "SUCCESS: Set roughness of " + e.name + " to " + e.material.roughness;
       }
+      else if (rawCmd.equals("intensity")) {
+        if (parts.size() < 3) return "Error: intensity <name> <val>";
+        Entity e = findEntity(parts.get(1));
+        if (e == null) return "Error: Entity not found: " + parts.get(1);
+        e.lightIntensity = float(parts.get(2));
+        return "SUCCESS: Set intensity of " + e.name + " to " + e.lightIntensity;
+      }
+      else if (rawCmd.equals("range")) {
+        if (parts.size() < 3) return "Error: range <name> <val>";
+        Entity e = findEntity(parts.get(1));
+        if (e == null) return "Error: Entity not found: " + parts.get(1);
+        e.lightRange = float(parts.get(2));
+        return "SUCCESS: Set range of " + e.name + " to " + e.lightRange;
+      }
+      else if (rawCmd.equals("visible") || rawCmd.equals("hide")) {
+        if (parts.size() < 2) return "Error: visible <name> [0|1]";
+        Entity e = findEntity(parts.get(1));
+        if (e == null) return "Error: Entity not found: " + parts.get(1);
+        if (parts.size() >= 3) {
+          e.visible = parts.get(2).equals("1") || parts.get(2).equalsIgnoreCase("true");
+        } else {
+          e.visible = !e.visible;
+        }
+        return "SUCCESS: " + e.name + " visibility is now " + e.visible;
+      }
       else if (rawCmd.equals("delete") || rawCmd.equals("remove")) {
         if (parts.size() < 2) return "Error: delete <name>";
         Entity e = findEntity(parts.get(1));
@@ -111,22 +137,31 @@ class CommandInterpreter {
         scene.entities.remove(e);
         return "SUCCESS: Deleted " + e.name;
       }
-      else if (rawCmd.equals("create") || rawCmd.equals("add")) {
-        if (parts.size() < 2) return "Error: create <type> (Cube, Sphere, Plane, Light)";
+      else if (rawCmd.equals("create") || rawCmd.equals("add") || rawCmd.equals("spawn")) {
+        if (parts.size() < 2) return "Error: create <type> [name] [x] [y] [z]";
         String type = parts.get(1).toLowerCase();
-        if (type.equals("cube")) { scene.addEntity("Cube", "Cube"); }
-        else if (type.equals("sphere")) { scene.addEntity("Sphere", "Sphere"); }
-        else if (type.equals("plane")) { scene.addEntity("Plane", "Plane"); }
+        String name = (parts.size() >= 3) ? parts.get(2) : "";
+        float x = (parts.size() >= 4) ? float(parts.get(3)) : 0;
+        float y = (parts.size() >= 5) ? float(parts.get(4)) : 0;
+        float z = (parts.size() >= 6) ? float(parts.get(5)) : 0;
+        
+        Entity e = null;
+        if (type.equals("cube")) e = scene.addEntity(name.isEmpty()?"Cube":name, "Cube");
+        else if (type.equals("sphere")) e = scene.addEntity(name.isEmpty()?"Sphere":name, "Sphere");
+        else if (type.equals("plane")) e = scene.addEntity(name.isEmpty()?"Plane":name, "Plane");
         else if (type.equals("light") || type.equals("pointlight")) { 
-          // Safety Check: Total PointLights limited to 5
           int existingLights = 0;
-          for (Entity e : scene.entities) if (e.type.equals("PointLight")) existingLights++;
-          if (existingLights >= 5) return "Error: Maximum 5 point lights reached (Stability Guard)";
-          
-          scene.addEntity("Light", "PointLight"); 
+          for (Entity el : scene.entities) if (el.type.equals("PointLight")) existingLights++;
+          if (existingLights >= 5) return "Error: Maximum 5 point lights reached";
+          e = scene.addEntity(name.isEmpty()?"Light":name, "PointLight"); 
+        } else {
+          return "Error: Unknown type: " + type;
         }
-        else return "Error: Unknown type: " + type;
-        return "SUCCESS: Created " + type;
+        
+        if (e != null && parts.size() >= 4) {
+          e.transform.position.set(x, y, z);
+        }
+        return "SUCCESS: Created " + (e!=null?e.name:type) + " at (" + x + "," + y + "," + z + ")";
       }
       else if (rawCmd.equals("rename") || rawCmd.equals("name")) {
         if (parts.size() < 3) return "Error: rename <oldName> <newName>";
@@ -191,6 +226,12 @@ class CommandInterpreter {
         scene.saveSnapshot();
         scene.isRuntime = true;
         scene.clearSelection();
+        // v1.3: Auto-compile all entity blueprints (all event types)
+        for (Entity e : scene.entities) {
+          if (e.blueprint != null && e.blueprint.nodes.size() > 1) {
+            e.blueprint.compileAllEvents();
+          }
+        }
         for (Entity e : scene.entities) {
           scene.triggerEvent(e, "Start");
         }

@@ -27,6 +27,12 @@ class SceneManager {
   void restoreSnapshot() {
     if (sceneSnapshot == null) return;
     
+    // v1.1: Preserve blueprints before restoring snapshot
+    HashMap<Integer, Blueprint> savedBlueprints = new HashMap<Integer, Blueprint>();
+    for (Entity e : entities) {
+      savedBlueprints.put(e.id, e.blueprint);
+    }
+    
     entities.clear();
     selectedEntities.clear();
     nextEntityId = snapshotNextId;
@@ -37,6 +43,13 @@ class SceneManager {
       JSONObject json = sceneSnapshot.getJSONObject(i);
       Entity e = new Entity(json.getInt("id"), json.getString("name"), json.getString("type"));
       e.fromJSON(json);
+      
+      // v1.1: Restore saved blueprint
+      if (savedBlueprints.containsKey(e.id)) {
+        e.blueprint = savedBlueprints.get(e.id);
+        e.blueprint.owner = e; // Update owner reference
+      }
+      
       entities.add(e);
       idMap.put(e.id, e);
     }
@@ -51,7 +64,7 @@ class SceneManager {
       }
     }
     
-    println("Scene Snapshot Restored");
+    println("Scene Snapshot Restored (Blueprints preserved)");
   }
   
   Entity findEntityById(int id) {
@@ -59,15 +72,43 @@ class SceneManager {
     return null;
   }
   
-  void addEntity(String name, String type) {
+  Entity addEntity(String name, String type) {
     Entity e = new Entity(nextEntityId++, name, type);
     entities.add(e);
     selectEntity(e, false);
     undoManager.push(new AddEntityCommand(this, e));
+    return e;
   }
   
   void triggerEvent(Entity e, String type) {
     if (e == null) return;
+    
+    // v1.3: Multi-event Blueprint PDES support
+    // Map runtime event names to Blueprint event keys
+    String vlbKey = null;
+    if (type.equals("Start")) vlbKey = "OnStart";
+    else if (type.equals("Update")) vlbKey = "OnUpdate";
+    else if (type.equals("onClick")) vlbKey = "OnMouseClick";
+    else if (type.equals("OnKeyPress")) vlbKey = "OnKeyPress";
+    else if (type.equals("OnBeginOverlap")) vlbKey = "OnBeginOverlap";
+    else if (type.equals("OnEndOverlap")) vlbKey = "OnEndOverlap";
+    
+    if (vlbKey != null && e.blueprintEventPDES.containsKey(vlbKey)) {
+      String pdes = e.blueprintEventPDES.get(vlbKey);
+      if (pdes != null && !pdes.isEmpty()) {
+        if (!type.equals("Update")) {
+          p3deditor.this.ui.debugConsole.addLog("> Event [" + vlbKey + "] on '" + e.name + "' running VLB Logic", 2);
+        }
+        p3deditor.this.scriptManager.runScript("VLB_" + vlbKey + "_" + e.name, pdes, e);
+      }
+    }
+    
+    // Legacy: Also support old single-PDES field for Start
+    if (type.equals("Start") && !e.blueprintEventPDES.containsKey("OnStart") && e.blueprintPDES != null && !e.blueprintPDES.isEmpty()) {
+      p3deditor.this.ui.debugConsole.addLog("> Event [Start] on '" + e.name + "' running VLB Logic (legacy)", 2);
+      p3deditor.this.scriptManager.runScript("VLB_" + e.name, e.blueprintPDES, e);
+    }
+    
     ArrayList<String> scripts = e.eventHandlers.get(type);
     if (scripts != null) {
       for (String scriptPath : scripts) {
@@ -91,7 +132,7 @@ class SceneManager {
     
     ArrayList<Entity> lights = new ArrayList<Entity>();
     for (Entity e : entities) {
-      if (e.type.equals("PointLight")) lights.add(e);
+      if (e.type.equals("PointLight") && e.visible) lights.add(e);
       if (lights.size() >= 5) break;
     }
     
@@ -214,6 +255,51 @@ class SceneManager {
       t.setFloat("sz", e.transform.scale.z);
       ej.setJSONObject("transform", t);
       
+      // v1.1: Serialize Blueprint
+      JSONObject bpj = new JSONObject();
+      JSONArray nodesArr = new JSONArray();
+      for (int ni = 0; ni < e.blueprint.nodes.size(); ni++) {
+        VLBNode nd = e.blueprint.nodes.get(ni);
+        JSONObject nj = new JSONObject();
+        nj.setInt("id", nd.id);
+        nj.setString("title", nd.title);
+        nj.setString("type", nd.type);
+        nj.setFloat("x", nd.x);
+        nj.setFloat("y", nd.y);
+        // Serialize pin default values
+        JSONArray pinsArr = new JSONArray();
+        ArrayList<VLBPin> allPins = new ArrayList<VLBPin>();
+        allPins.addAll(nd.inputs); allPins.addAll(nd.outputs);
+        for (int pi = 0; pi < allPins.size(); pi++) {
+          VLBPin pin = allPins.get(pi);
+          JSONObject pj = new JSONObject();
+          pj.setString("label", pin.label);
+          pj.setBoolean("isInput", pin.isInput);
+          pj.setFloat("val", pin.val);
+          pj.setString("sVal", pin.sVal);
+          pinsArr.setJSONObject(pi, pj);
+        }
+        nj.setJSONArray("pins", pinsArr);
+        nodesArr.setJSONObject(ni, nj);
+      }
+      bpj.setJSONArray("nodes", nodesArr);
+      
+      // Serialize connections
+      JSONArray connsArr = new JSONArray();
+      for (int ci = 0; ci < e.blueprint.connections.size(); ci++) {
+        VLBConnection conn = e.blueprint.connections.get(ci);
+        JSONObject cj = new JSONObject();
+        cj.setInt("fromNodeId", conn.from.parent.id);
+        cj.setString("fromPinLabel", conn.from.label);
+        cj.setBoolean("fromIsInput", conn.from.isInput);
+        cj.setInt("toNodeId", conn.pinTo.parent.id);
+        cj.setString("toPinLabel", conn.pinTo.label);
+        cj.setBoolean("toIsInput", conn.pinTo.isInput);
+        connsArr.setJSONObject(ci, cj);
+      }
+      bpj.setJSONArray("connections", connsArr);
+      ej.setJSONObject("blueprint", bpj);
+      
       entArr.setJSONObject(i, ej);
     }
     root.setJSONArray("entities", entArr);
@@ -251,6 +337,84 @@ class SceneManager {
         e.transform.position.set(t.getFloat("px"), t.getFloat("py"), t.getFloat("pz"));
         e.transform.rotation.set(t.getFloat("rx"), t.getFloat("ry"), t.getFloat("rz"));
         e.transform.scale.set(t.getFloat("sx"), t.getFloat("sy"), t.getFloat("sz"));
+        
+        // v1.1: Deserialize Blueprint
+        if (!ej.isNull("blueprint")) {
+          JSONObject bpj = ej.getJSONObject("blueprint");
+          e.blueprint.nodes.clear();
+          e.blueprint.connections.clear();
+          
+          // Build a mapping from node factory type names to recreate nodes
+          JSONArray nodesArr = bpj.getJSONArray("nodes");
+          for (int ni = 0; ni < nodesArr.size(); ni++) {
+            JSONObject nj = nodesArr.getJSONObject(ni);
+            String nTitle = nj.getString("title");
+            String nType = nj.getString("type");
+            int nId = nj.getInt("id");
+            float nx = nj.getFloat("x");
+            float ny = nj.getFloat("y");
+            
+            // Try factory first
+            String factoryKey = nType + ": " + nTitle;
+            VLBNode nd = createVLBNode(factoryKey, nId, nx, ny);
+            if (nd == null) {
+              // Fallback: create manually (e.g. Event: OnStart)
+              nd = new VLBNode(nId, nTitle, nType, nx, ny);
+              // Rebuild pins from saved data
+              if (nj.hasKey("pins")) {
+                JSONArray pinsArr = nj.getJSONArray("pins");
+                for (int pi = 0; pi < pinsArr.size(); pi++) {
+                  JSONObject pj = pinsArr.getJSONObject(pi);
+                  boolean isInput = pj.getBoolean("isInput");
+                  VLBPin pin = nd.addPin(pj.getString("label"), isInput, true, "flow");
+                  pin.val = pj.getFloat("val");
+                  pin.sVal = pj.getString("sVal");
+                }
+              }
+            }
+            
+            // Restore pin values from saved data
+            if (nj.hasKey("pins")) {
+              JSONArray pinsArr = nj.getJSONArray("pins");
+              for (int pi = 0; pi < pinsArr.size(); pi++) {
+                JSONObject pj = pinsArr.getJSONObject(pi);
+                String pLabel = pj.getString("label");
+                boolean pIsInput = pj.getBoolean("isInput");
+                VLBPin matchPin = nd.findPin(pLabel, pIsInput);
+                if (matchPin != null) {
+                  matchPin.val = pj.getFloat("val");
+                  matchPin.sVal = pj.getString("sVal");
+                }
+              }
+            }
+            e.blueprint.nodes.add(nd);
+          }
+          
+          // Restore connections
+          if (bpj.hasKey("connections")) {
+            JSONArray connsArr = bpj.getJSONArray("connections");
+            for (int ci = 0; ci < connsArr.size(); ci++) {
+              JSONObject cj = connsArr.getJSONObject(ci);
+              int fromNodeId = cj.getInt("fromNodeId");
+              String fromPinLabel = cj.getString("fromPinLabel");
+              boolean fromIsInput = cj.getBoolean("fromIsInput");
+              int toNodeId = cj.getInt("toNodeId");
+              String toPinLabel = cj.getString("toPinLabel");
+              boolean toIsInput = cj.getBoolean("toIsInput");
+              
+              VLBPin fromPin = null, toPin = null;
+              for (VLBNode nd : e.blueprint.nodes) {
+                if (nd.id == fromNodeId) fromPin = nd.findPin(fromPinLabel, fromIsInput);
+                if (nd.id == toNodeId) toPin = nd.findPin(toPinLabel, toIsInput);
+              }
+              if (fromPin != null && toPin != null) {
+                e.blueprint.connections.add(new VLBConnection(fromPin, toPin));
+                fromPin.connectedTo = toPin;
+                toPin.connectedTo = fromPin;
+              }
+            }
+          }
+        }
         
         entities.add(e);
         parentIds.add(ej.isNull("parentId") ? -1 : ej.getInt("parentId"));
