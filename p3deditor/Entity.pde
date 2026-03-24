@@ -20,6 +20,7 @@ class Entity {
   
   // v0.8.0: External Model Slot
   PShape model = null;
+  String modelPath = ""; // v2.1: Track source for packaging
   
   // v0.5.0: Events & Scripts mounting
   HashMap<String, ArrayList<String>> eventHandlers = new HashMap<String, ArrayList<String>>();
@@ -251,6 +252,8 @@ class Entity {
     json.setString("name", name);
     json.setString("type", type);
     json.setInt("color", col);
+    json.setBoolean("visible", visible);
+    json.setString("modelPath", modelPath);
     
     JSONObject pos = new JSONObject();
     pos.setFloat("x", transform.position.x);
@@ -275,6 +278,16 @@ class Entity {
       json.setFloat("range", lightRange);
     }
     
+    // Material Properties
+    JSONObject mat = new JSONObject();
+    mat.setInt("albedo", material.albedo);
+    mat.setFloat("metallic", material.metallic);
+    mat.setFloat("roughness", material.roughness);
+    mat.setString("albedoPath", material.albedoPath);
+    mat.setString("metallicPath", material.metallicPath);
+    mat.setString("roughnessPath", material.roughnessPath);
+    json.setJSONObject("material", mat);
+    
     JSONArray evts = new JSONArray();
     int idx = 0;
     for (String key : eventHandlers.keySet()) {
@@ -295,6 +308,9 @@ class Entity {
   void fromJSON(JSONObject json) {
     this.name = json.getString("name");
     this.col = json.getInt("color");
+    this.visible = json.getBoolean("visible", true);
+    this.modelPath = json.getString("modelPath", "");
+    
     JSONObject pos = json.getJSONObject("pos");
     transform.position.set(pos.getFloat("x"), pos.getFloat("y"), pos.getFloat("z"));
     JSONObject rot = json.getJSONObject("rot");
@@ -305,6 +321,16 @@ class Entity {
     if (type.equals("PointLight")) {
       lightIntensity = json.getFloat("intensity");
       lightRange = json.getFloat("range");
+    }
+    
+    if (!json.isNull("material")) {
+      JSONObject mat = json.getJSONObject("material");
+      material.albedo = mat.getInt("albedo");
+      material.metallic = mat.getFloat("metallic");
+      material.roughness = mat.getFloat("roughness");
+      material.albedoPath = mat.getString("albedoPath", "");
+      material.metallicPath = mat.getString("metallicPath", "");
+      material.roughnessPath = mat.getString("roughnessPath", "");
     }
     
     eventHandlers.clear();

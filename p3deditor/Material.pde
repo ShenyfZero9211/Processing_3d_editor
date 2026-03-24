@@ -12,6 +12,11 @@ class Material {
   PImage metallicMap = null;
   PImage roughnessMap = null;
   
+  // v2.1: Path Tracking for Packaging
+  String albedoPath = "";
+  String metallicPath = "";
+  String roughnessPath = "";
+  
   boolean hasAlbedoMap = false;
   boolean hasMetallicMap = false;
   boolean hasRoughnessMap = false;

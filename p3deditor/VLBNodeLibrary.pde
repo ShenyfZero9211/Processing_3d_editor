@@ -78,6 +78,24 @@ VLBNode createVLBNode(String typeName, int id, float x, float y) {
     n.addPin("Range", true, false, "float").val = 300;
     return n;
   }
+  if (typeName.equals("Action: Set Background")) {
+    VLBNode n = new VLBNode(id, "Set Background", "Action", x, y);
+    n.addPin("In", true, true, "flow");
+    n.addPin("Out", false, true, "flow");
+    n.addPin("R", true, false, "float").val = 30;
+    n.addPin("G", true, false, "float").val = 30;
+    n.addPin("B", true, false, "float").val = 35;
+    return n;
+  }
+  if (typeName.equals("Action: Camera Teleport")) {
+    VLBNode n = new VLBNode(id, "Camera Teleport", "Action", x, y);
+    n.addPin("In", true, true, "flow");
+    n.addPin("Out", false, true, "flow");
+    n.addPin("X", true, false, "float").val = 0;
+    n.addPin("Y", true, false, "float").val = 200;
+    n.addPin("Z", true, false, "float").val = 500;
+    return n;
+  }
 
   // === LOGIC NODES ===
   if (typeName.equals("Logic: Branch")) {

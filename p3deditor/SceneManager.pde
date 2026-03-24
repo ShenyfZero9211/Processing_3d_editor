@@ -7,13 +7,26 @@ class SceneManager {
   boolean useLocalSpace = false; // Default to World as requested
   Entity lastHoveredEntity = null;
   
-  // v0.5.0: Runtime & Snapshot
-  boolean isRuntime = false;
+  // v2.0: Engine Mode System
+  public static final int MODE_EDIT = 0;
+  public static final int MODE_SIMULATE = 1;
+  public static final int MODE_GAME = 2;
+  
+  int engineMode = MODE_EDIT;
+  boolean isPlaying() { return engineMode != MODE_EDIT; }
+  
   JSONArray sceneSnapshot = null;
   int snapshotNextId = 1;
   
   // v0.8.0: Global IBL Environment Map
   PImage envMap = null;
+  float envMapIntensity = 1.0f; 
+  int backgroundColor = p3deditor.this.color(30,30,35); // v2.4: Scene background
+  
+  // v2.4: Level Blueprint (Global Logic)
+  Blueprint levelBlueprint = new Blueprint(this);
+  String blueprintPDES = "";
+  HashMap<String, String> blueprintEventPDES = new HashMap<String, String>();
   
   void saveSnapshot() {
     sceneSnapshot = new JSONArray();
@@ -32,6 +45,7 @@ class SceneManager {
     for (Entity e : entities) {
       savedBlueprints.put(e.id, e.blueprint);
     }
+    Blueprint savedLevelBP = levelBlueprint;
     
     entities.clear();
     selectedEntities.clear();
@@ -49,6 +63,9 @@ class SceneManager {
         e.blueprint = savedBlueprints.get(e.id);
         e.blueprint.owner = e; // Update owner reference
       }
+      
+      levelBlueprint = savedLevelBP;
+      levelBlueprint.owner = this;
       
       entities.add(e);
       idMap.put(e.id, e);
@@ -81,7 +98,7 @@ class SceneManager {
   }
   
   void triggerEvent(Entity e, String type) {
-    if (e == null) return;
+    if (e == null && !type.equals("Start") && !type.equals("Update")) return;
     
     // v1.3: Multi-event Blueprint PDES support
     // Map runtime event names to Blueprint event keys
@@ -93,33 +110,39 @@ class SceneManager {
     else if (type.equals("OnBeginOverlap")) vlbKey = "OnBeginOverlap";
     else if (type.equals("OnEndOverlap")) vlbKey = "OnEndOverlap";
     
-    if (vlbKey != null && e.blueprintEventPDES.containsKey(vlbKey)) {
-      String pdes = e.blueprintEventPDES.get(vlbKey);
-      if (pdes != null && !pdes.isEmpty()) {
-        if (!type.equals("Update")) {
-          p3deditor.this.ui.debugConsole.addLog("> Event [" + vlbKey + "] on '" + e.name + "' running VLB Logic", 2);
+    if (vlbKey != null) {
+      HashMap<String, String> eventMap = (e != null) ? e.blueprintEventPDES : blueprintEventPDES;
+      if (eventMap.containsKey(vlbKey)) {
+        String pdes = eventMap.get(vlbKey);
+        if (pdes != null && !pdes.isEmpty()) {
+          String ownerName = (e != null) ? e.name : "Level";
+          if (!type.equals("Update")) {
+            p3deditor.this.ui.debugConsole.addLog("> Event [" + vlbKey + "] on '" + ownerName + "' running VLB Logic", 2);
+          }
+          p3deditor.this.scriptManager.runScript("VLB_" + vlbKey + "_" + ownerName, pdes, e);
         }
-        p3deditor.this.scriptManager.runScript("VLB_" + vlbKey + "_" + e.name, pdes, e);
       }
     }
     
-    // Legacy: Also support old single-PDES field for Start
-    if (type.equals("Start") && !e.blueprintEventPDES.containsKey("OnStart") && e.blueprintPDES != null && !e.blueprintPDES.isEmpty()) {
-      p3deditor.this.ui.debugConsole.addLog("> Event [Start] on '" + e.name + "' running VLB Logic (legacy)", 2);
-      p3deditor.this.scriptManager.runScript("VLB_" + e.name, e.blueprintPDES, e);
-    }
-    
-    ArrayList<String> scripts = e.eventHandlers.get(type);
-    if (scripts != null) {
-      for (String scriptPath : scripts) {
-        String[] lines = p3deditor.this.loadStrings(scriptPath);
-        if (lines != null) {
-          if (!type.equals("Update")) {
-             p3deditor.this.ui.debugConsole.addLog("> Event [" + type + "] on '" + e.name + "' triggered script: " + scriptPath, 2);
+    // Legacy support & Entity-specific scripts
+    if (e != null) {
+      if (type.equals("Start") && !e.blueprintEventPDES.containsKey("OnStart") && e.blueprintPDES != null && !e.blueprintPDES.isEmpty()) {
+        p3deditor.this.ui.debugConsole.addLog("> Event [Start] on '" + e.name + "' running VLB Logic (legacy)", 2);
+        p3deditor.this.scriptManager.runScript("VLB_" + e.name, e.blueprintPDES, e);
+      }
+      
+      ArrayList<String> scripts = e.eventHandlers.get(type);
+      if (scripts != null) {
+        for (String scriptPath : scripts) {
+          String[] lines = p3deditor.this.loadStrings(scriptPath);
+          if (lines != null) {
+            if (!type.equals("Update")) {
+               p3deditor.this.ui.debugConsole.addLog("> Event [" + type + "] on '" + e.name + "' triggered script: " + scriptPath, 2);
+            }
+            p3deditor.this.scriptManager.runScript(scriptPath, String.join("\n", lines), e);
+          } else {
+            p3deditor.this.ui.debugConsole.addLog("Error: Event script not found: " + scriptPath, 3);
           }
-          p3deditor.this.scriptManager.runScript(scriptPath, String.join("\n", lines), e);
-        } else {
-          p3deditor.this.ui.debugConsole.addLog("Error: Event script not found: " + scriptPath, 3);
         }
       }
     }
@@ -165,6 +188,7 @@ class SceneManager {
     if (envMap != null) {
       p3deditor.this.pbrShader.set("envMap", envMap);
       p3deditor.this.pbrShader.set("hasEnvMap", true);
+      p3deditor.this.pbrShader.set("envMapIntensity", envMapIntensity);
     } else {
       p3deditor.this.pbrShader.set("hasEnvMap", false);
     }
@@ -190,7 +214,7 @@ class SceneManager {
     }
     
     // Render Gizmo over selected entities
-    if (!selectedEntities.isEmpty()) {
+    if (!selectedEntities.isEmpty() && engineMode != MODE_GAME) {
       app.hint(PConstants.DISABLE_DEPTH_TEST);
       gizmo.render(app, this);
       app.hint(PConstants.ENABLE_DEPTH_TEST);
@@ -232,6 +256,9 @@ class SceneManager {
     
     JSONObject root = new JSONObject();
     root.setInt("nextEntityId", nextEntityId);
+    root.setInt("backgroundColor", backgroundColor);
+    root.setFloat("envMapIntensity", envMapIntensity);
+    root.setJSONObject("levelBlueprint", serializeBlueprint(levelBlueprint));
     
     JSONArray entArr = new JSONArray();
     for (int i=0; i<entities.size(); i++) {
@@ -254,51 +281,7 @@ class SceneManager {
       t.setFloat("sy", e.transform.scale.y);
       t.setFloat("sz", e.transform.scale.z);
       ej.setJSONObject("transform", t);
-      
-      // v1.1: Serialize Blueprint
-      JSONObject bpj = new JSONObject();
-      JSONArray nodesArr = new JSONArray();
-      for (int ni = 0; ni < e.blueprint.nodes.size(); ni++) {
-        VLBNode nd = e.blueprint.nodes.get(ni);
-        JSONObject nj = new JSONObject();
-        nj.setInt("id", nd.id);
-        nj.setString("title", nd.title);
-        nj.setString("type", nd.type);
-        nj.setFloat("x", nd.x);
-        nj.setFloat("y", nd.y);
-        // Serialize pin default values
-        JSONArray pinsArr = new JSONArray();
-        ArrayList<VLBPin> allPins = new ArrayList<VLBPin>();
-        allPins.addAll(nd.inputs); allPins.addAll(nd.outputs);
-        for (int pi = 0; pi < allPins.size(); pi++) {
-          VLBPin pin = allPins.get(pi);
-          JSONObject pj = new JSONObject();
-          pj.setString("label", pin.label);
-          pj.setBoolean("isInput", pin.isInput);
-          pj.setFloat("val", pin.val);
-          pj.setString("sVal", pin.sVal);
-          pinsArr.setJSONObject(pi, pj);
-        }
-        nj.setJSONArray("pins", pinsArr);
-        nodesArr.setJSONObject(ni, nj);
-      }
-      bpj.setJSONArray("nodes", nodesArr);
-      
-      // Serialize connections
-      JSONArray connsArr = new JSONArray();
-      for (int ci = 0; ci < e.blueprint.connections.size(); ci++) {
-        VLBConnection conn = e.blueprint.connections.get(ci);
-        JSONObject cj = new JSONObject();
-        cj.setInt("fromNodeId", conn.from.parent.id);
-        cj.setString("fromPinLabel", conn.from.label);
-        cj.setBoolean("fromIsInput", conn.from.isInput);
-        cj.setInt("toNodeId", conn.pinTo.parent.id);
-        cj.setString("toPinLabel", conn.pinTo.label);
-        cj.setBoolean("toIsInput", conn.pinTo.isInput);
-        connsArr.setJSONObject(ci, cj);
-      }
-      bpj.setJSONArray("connections", connsArr);
-      ej.setJSONObject("blueprint", bpj);
+      ej.setJSONObject("blueprint", serializeBlueprint(e.blueprint));
       
       entArr.setJSONObject(i, ej);
     }
@@ -323,6 +306,12 @@ class SceneManager {
       clearSelection();
       
       nextEntityId = root.getInt("nextEntityId");
+      backgroundColor = root.getInt("backgroundColor", p3deditor.this.color(30, 30, 35));
+      envMapIntensity = root.getFloat("envMapIntensity", 1.0f);
+      
+      if (root.hasKey("levelBlueprint")) {
+        deserializeBlueprint(levelBlueprint, root.getJSONObject("levelBlueprint"));
+      }
       
       JSONArray entArr = root.getJSONArray("entities");
       ArrayList<Integer> parentIds = new ArrayList<Integer>();
@@ -338,82 +327,8 @@ class SceneManager {
         e.transform.rotation.set(t.getFloat("rx"), t.getFloat("ry"), t.getFloat("rz"));
         e.transform.scale.set(t.getFloat("sx"), t.getFloat("sy"), t.getFloat("sz"));
         
-        // v1.1: Deserialize Blueprint
-        if (!ej.isNull("blueprint")) {
-          JSONObject bpj = ej.getJSONObject("blueprint");
-          e.blueprint.nodes.clear();
-          e.blueprint.connections.clear();
-          
-          // Build a mapping from node factory type names to recreate nodes
-          JSONArray nodesArr = bpj.getJSONArray("nodes");
-          for (int ni = 0; ni < nodesArr.size(); ni++) {
-            JSONObject nj = nodesArr.getJSONObject(ni);
-            String nTitle = nj.getString("title");
-            String nType = nj.getString("type");
-            int nId = nj.getInt("id");
-            float nx = nj.getFloat("x");
-            float ny = nj.getFloat("y");
-            
-            // Try factory first
-            String factoryKey = nType + ": " + nTitle;
-            VLBNode nd = createVLBNode(factoryKey, nId, nx, ny);
-            if (nd == null) {
-              // Fallback: create manually (e.g. Event: OnStart)
-              nd = new VLBNode(nId, nTitle, nType, nx, ny);
-              // Rebuild pins from saved data
-              if (nj.hasKey("pins")) {
-                JSONArray pinsArr = nj.getJSONArray("pins");
-                for (int pi = 0; pi < pinsArr.size(); pi++) {
-                  JSONObject pj = pinsArr.getJSONObject(pi);
-                  boolean isInput = pj.getBoolean("isInput");
-                  VLBPin pin = nd.addPin(pj.getString("label"), isInput, true, "flow");
-                  pin.val = pj.getFloat("val");
-                  pin.sVal = pj.getString("sVal");
-                }
-              }
-            }
-            
-            // Restore pin values from saved data
-            if (nj.hasKey("pins")) {
-              JSONArray pinsArr = nj.getJSONArray("pins");
-              for (int pi = 0; pi < pinsArr.size(); pi++) {
-                JSONObject pj = pinsArr.getJSONObject(pi);
-                String pLabel = pj.getString("label");
-                boolean pIsInput = pj.getBoolean("isInput");
-                VLBPin matchPin = nd.findPin(pLabel, pIsInput);
-                if (matchPin != null) {
-                  matchPin.val = pj.getFloat("val");
-                  matchPin.sVal = pj.getString("sVal");
-                }
-              }
-            }
-            e.blueprint.nodes.add(nd);
-          }
-          
-          // Restore connections
-          if (bpj.hasKey("connections")) {
-            JSONArray connsArr = bpj.getJSONArray("connections");
-            for (int ci = 0; ci < connsArr.size(); ci++) {
-              JSONObject cj = connsArr.getJSONObject(ci);
-              int fromNodeId = cj.getInt("fromNodeId");
-              String fromPinLabel = cj.getString("fromPinLabel");
-              boolean fromIsInput = cj.getBoolean("fromIsInput");
-              int toNodeId = cj.getInt("toNodeId");
-              String toPinLabel = cj.getString("toPinLabel");
-              boolean toIsInput = cj.getBoolean("toIsInput");
-              
-              VLBPin fromPin = null, toPin = null;
-              for (VLBNode nd : e.blueprint.nodes) {
-                if (nd.id == fromNodeId) fromPin = nd.findPin(fromPinLabel, fromIsInput);
-                if (nd.id == toNodeId) toPin = nd.findPin(toPinLabel, toIsInput);
-              }
-              if (fromPin != null && toPin != null) {
-                e.blueprint.connections.add(new VLBConnection(fromPin, toPin));
-                fromPin.connectedTo = toPin;
-                toPin.connectedTo = fromPin;
-              }
-            }
-          }
+        if (ej.hasKey("blueprint")) {
+          deserializeBlueprint(e.blueprint, ej.getJSONObject("blueprint"));
         }
         
         entities.add(e);
@@ -440,6 +355,88 @@ class SceneManager {
       if (p3deditor.this.ui != null) p3deditor.this.ui.debugConsole.addLog("Error loading scene: " + e.getMessage(), 3);
       System.err.println("Error loading scene: " + e.getMessage());
       e.printStackTrace();
+    }
+  }
+  
+  // v2.4 Blueprint Serialization Helpers
+  JSONObject serializeBlueprint(Blueprint bp) {
+    JSONObject bpj = new JSONObject();
+    JSONArray nodesArr = new JSONArray();
+    for (int ni = 0; ni < bp.nodes.size(); ni++) {
+      VLBNode nd = bp.nodes.get(ni);
+      JSONObject nj = new JSONObject();
+      nj.setInt("id", nd.id);
+      nj.setString("title", nd.title);
+      nj.setString("type", nd.type);
+      nj.setFloat("x", nd.x);
+      nj.setFloat("y", nd.y);
+      JSONArray pinsArr = new JSONArray();
+      ArrayList<VLBPin> allPins = new ArrayList<VLBPin>();
+      allPins.addAll(nd.inputs); allPins.addAll(nd.outputs);
+      for (int pi = 0; pi < allPins.size(); pi++) {
+        VLBPin pin = allPins.get(pi);
+        JSONObject pj = new JSONObject();
+        pj.setString("label", pin.label);
+        pj.setBoolean("isInput", pin.isInput);
+        pj.setFloat("val", pin.val);
+        pj.setString("sVal", pin.sVal);
+        pinsArr.setJSONObject(pi, pj);
+      }
+      nj.setJSONArray("pins", pinsArr);
+      nodesArr.setJSONObject(ni, nj);
+    }
+    bpj.setJSONArray("nodes", nodesArr);
+    JSONArray connsArr = new JSONArray();
+    for (int ci = 0; ci < bp.connections.size(); ci++) {
+      VLBConnection conn = bp.connections.get(ci);
+      JSONObject cj = new JSONObject();
+      cj.setInt("fromNodeId", conn.from.parent.id);
+      cj.setString("fromPinLabel", conn.from.label);
+      cj.setBoolean("fromIsInput", conn.from.isInput);
+      cj.setInt("toNodeId", conn.pinTo.parent.id);
+      cj.setString("toPinLabel", conn.pinTo.label);
+      cj.setBoolean("toIsInput", conn.pinTo.isInput);
+      connsArr.setJSONObject(ci, cj);
+    }
+    bpj.setJSONArray("connections", connsArr);
+    return bpj;
+  }
+  
+  void deserializeBlueprint(Blueprint bp, JSONObject bpj) {
+    bp.nodes.clear();
+    bp.connections.clear();
+    JSONArray nodesArr = bpj.getJSONArray("nodes");
+    for (int ni = 0; ni < nodesArr.size(); ni++) {
+      JSONObject nj = nodesArr.getJSONObject(ni);
+      VLBNode nd = new VLBNode(nj.getInt("id"), nj.getString("title"), nj.getString("type"), nj.getFloat("x"), nj.getFloat("y"));
+      if (nj.hasKey("pins")) {
+        JSONArray pinsArr = nj.getJSONArray("pins");
+        for (int pi = 0; pi < pinsArr.size(); pi++) {
+          JSONObject pj = pinsArr.getJSONObject(pi);
+          VLBPin matchPin = nd.findPin(pj.getString("label"), pj.getBoolean("isInput"));
+          if (matchPin != null) {
+            matchPin.val = pj.getFloat("val");
+            matchPin.sVal = pj.getString("sVal");
+          }
+        }
+      }
+      bp.nodes.add(nd);
+    }
+    if (bpj.hasKey("connections")) {
+      JSONArray connsArr = bpj.getJSONArray("connections");
+      for (int ci = 0; ci < connsArr.size(); ci++) {
+        JSONObject cj = connsArr.getJSONObject(ci);
+        VLBPin fromPin = null, toPin = null;
+        for (VLBNode nd : bp.nodes) {
+          if (nd.id == cj.getInt("fromNodeId")) fromPin = nd.findPin(cj.getString("fromPinLabel"), cj.getBoolean("fromIsInput"));
+          if (nd.id == cj.getInt("toNodeId")) toPin = nd.findPin(cj.getString("toPinLabel"), cj.getBoolean("toIsInput"));
+        }
+        if (fromPin != null && toPin != null) {
+          bp.connections.add(new VLBConnection(fromPin, toPin));
+          fromPin.connectedTo = toPin;
+          toPin.connectedTo = fromPin;
+        }
+      }
     }
   }
 }

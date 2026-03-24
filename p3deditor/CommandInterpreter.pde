@@ -211,31 +211,46 @@ class CommandInterpreter {
       else if (rawCmd.equals("stop")) {
         if (scriptManager != null) {
           scriptManager.stopAll();
-          if (scene.isRuntime) {
-            scene.isRuntime = false;
+          if (scene.isPlaying()) {
+            scene.engineMode = SceneManager.MODE_EDIT;
             scene.restoreSnapshot();
             scene.lastHoveredEntity = null; // Clear hover state
-            return "SUCCESS: Stopped Play Mode & Restored Scene";
+            return "SUCCESS: Stopped Mode & Restored Scene";
           }
           return "SUCCESS: Stopped all scripts";
         }
         return "Error: ScriptManager not initialized";
       }
       else if (rawCmd.equals("play") || rawCmd.equals("start")) {
-        if (scene.isRuntime) return "Already in Play Mode";
+        if (scene.isPlaying()) return "Already in Play Mode";
+        
+        // v2.0: Support "play simulate" vs "play game" (default to simulate for developer safety)
+        int targetMode = SceneManager.MODE_SIMULATE;
+        if (parts.size() >= 2) {
+          if (parts.get(1).equalsIgnoreCase("game")) targetMode = SceneManager.MODE_GAME;
+          else if (parts.get(1).equalsIgnoreCase("simulate")) targetMode = SceneManager.MODE_SIMULATE;
+        }
+        
         scene.saveSnapshot();
-        scene.isRuntime = true;
+        scene.engineMode = targetMode;
         scene.clearSelection();
+        
+        // v2.4 Level Blueprint Auto-compile & Start
+        if (scene.levelBlueprint != null && scene.levelBlueprint.nodes.size() > 0) {
+          scene.levelBlueprint.compileAllEvents();
+          scene.triggerEvent(null, "Start");
+        }
+        
         // v1.3: Auto-compile all entity blueprints (all event types)
         for (Entity e : scene.entities) {
-          if (e.blueprint != null && e.blueprint.nodes.size() > 1) {
+          if (e.blueprint != null && e.blueprint.nodes.size() > 0) {
             e.blueprint.compileAllEvents();
           }
         }
         for (Entity e : scene.entities) {
           scene.triggerEvent(e, "Start");
         }
-        return "SUCCESS: Entered Play Mode";
+        return "SUCCESS: Entered " + (targetMode == SceneManager.MODE_GAME ? "GAME" : "SIMULATE") + " Mode";
       }
       else if (rawCmd.equals("mount")) {
         if (parts.size() < 4) return "Error: mount <entity> <event> <script>";
@@ -326,8 +341,24 @@ class CommandInterpreter {
         e.material.setRoughnessMap(p3deditor.this.loadImage(parts.get(2)));
         return "SUCCESS: Loaded Roughness Map into " + e.name;
       }
+      else if (rawCmd.equals("cam_tp")) {
+        if (parts.size() < 4) return "Error: cam_tp <x> <y> <z>";
+        float tx = Float.parseFloat(parts.get(1));
+        float ty = Float.parseFloat(parts.get(2));
+        float tz = Float.parseFloat(parts.get(3));
+        p3deditor.this.editorCamera.pos.set(tx, ty, tz);
+        return "SUCCESS: Teleported camera to " + tx + " " + ty + " " + tz;
+      }
+      else if (rawCmd.equals("bg")) {
+        if (parts.size() < 4) return "Error: bg <r> <g> <b>";
+        int r = (int)Float.parseFloat(parts.get(1));
+        int g = (int)Float.parseFloat(parts.get(2));
+        int b = (int)Float.parseFloat(parts.get(3));
+        scene.backgroundColor = p3deditor.this.color(r, g, b);
+        return "SUCCESS: Set background color to RGB(" + r + "," + g + "," + b + ")";
+      }
       else if (rawCmd.equals("help")) {
-        return "CMDS: move, tp, color, scale, delete, rename, clear, create, metal, rough, load_obj, load_env, load_albedo, mount, osc_connect, play, help";
+        return "CMDS: move, tp, color, scale, delete, rename, clear, create, metal, rough, load_obj, load_env, load_albedo, mount, osc_connect, play, cam_tp, bg, help";
       }
     } catch (Exception ex) {
       return "Error: " + ex.getMessage();

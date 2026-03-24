@@ -100,9 +100,12 @@ void setup() {
 }
 
 void draw() {
-  background(40);
+  background(scene.backgroundColor);
   
-  if (scriptManager != null) scriptManager.update();
+  if (scriptManager != null) {
+    scriptManager.update();
+    if (scene.isPlaying()) scene.triggerEvent(null, "Update"); // v2.4 Level Update
+  }
   
   editorCamera.update(keyStates); // Process WASD movement frame by frame
   
@@ -143,7 +146,7 @@ void draw() {
     }
   }
   
-  drawGrid();
+  if (scene.engineMode != SceneManager.MODE_GAME) drawGrid();
   scene.render(this);
   
   // ================= DEBUG: DRAW THE RAY =================
@@ -200,7 +203,7 @@ void draw() {
   }
   
   // Final UI Layer (Must be last to cover all overlays)
-  if (showUI) {
+  if (showUI && scene.engineMode != SceneManager.MODE_GAME) {
     ui.render();
     ui.renderOverlayInstructions();
   }
@@ -208,18 +211,26 @@ void draw() {
   // vlbEditor also needs its own state protection
   hint(DISABLE_DEPTH_TEST);
   resetShader();
-  vlbEditor.render();
+  if (scene.engineMode != SceneManager.MODE_GAME) vlbEditor.render();
   
   popStyle(); // End HUD style protection
   
-  // v0.5.0: Play Mode Indicator (Colored Border & Status)
-  if (scene.isRuntime) {
+  // v2.0: Professional Mode Indicators
+  if (scene.isPlaying()) {
     pushStyle();
     camera(); hint(DISABLE_DEPTH_TEST); noLights();
-    stroke(#4285F4, 200); strokeWeight(10); noFill();
-    rect(0, 0, width, height);
-    fill(#4285F4); textSize(24); textAlign(CENTER, TOP);
-    text("RUNNING (PLAY MODE)", width/2, 45);
+    
+    if (scene.engineMode == SceneManager.MODE_SIMULATE) {
+      stroke(#FFB300, 200); strokeWeight(6); noFill(); rect(0, 0, width, height);
+      fill(#FFB300); textSize(24); textAlign(CENTER, TOP);
+      text("DEVELOPER SIMULATION (DEBUG MODE)", width/2, 45);
+    } else if (scene.engineMode == SceneManager.MODE_GAME) {
+      // Subtle pulse or static thin blue border for Game Mode
+      stroke(#4285F4, 80); strokeWeight(2); noFill(); rect(0, 0, width, height);
+      // Subtle ESC hint
+      fill(255, 60); textSize(10); textAlign(RIGHT, BOTTOM);
+      text("Press ESC to exit Play Mode", width - 10, height - 10);
+    }
     popStyle();
     
     // --- EVALUATE FRAME-BASED RUNTIME EVENTS ---
@@ -304,7 +315,7 @@ void mousePressed() {
   }
   
   // v0.5.0: Runtime Event Distribution
-  if (scene.isRuntime) {
+  if (scene.isPlaying()) {
      Ray ray = raycaster.getPickRay(mouseX, mouseY, width, height, savedProj, savedView);
      Entity hit = scene.pickEntity(ray, raycaster);
      if (hit != null) {
@@ -649,6 +660,15 @@ void mouseWheel(MouseEvent event) {
 }
 
 void keyPressed() {
+  // v2.0: Game Mode Shortcut Protection
+  if (scene.engineMode == SceneManager.MODE_GAME) {
+    if (key == ESC) {
+      interpreter.execute("stop");
+      key = 0;
+    }
+    return;
+  }
+  
   if (vlbEditor.visible) {
     vlbEditor.handleKeyPressed(key, keyCode);
     if (key == ESC) { vlbEditor.visible = false; key = 0; }
@@ -765,9 +785,11 @@ void fileSelectedForScript(File selection) {
 // v0.8.0: Asset Loading Callbacks
 void albedoMapSelected(File selection) {
   if (selection != null && scriptMountTarget != null) {
-    PImage img = loadImage(selection.getAbsolutePath());
+    String path = selection.getAbsolutePath();
+    PImage img = loadImage(path);
     if (img != null) {
       scriptMountTarget.material.setAlbedoMap(img);
+      scriptMountTarget.material.albedoPath = path;
       ui.debugConsole.addLog("Loaded Albedo Map to " + scriptMountTarget.name, 0);
     }
   }
@@ -775,9 +797,11 @@ void albedoMapSelected(File selection) {
 
 void metallicMapSelected(File selection) {
   if (selection != null && scriptMountTarget != null) {
-    PImage img = loadImage(selection.getAbsolutePath());
+    String path = selection.getAbsolutePath();
+    PImage img = loadImage(path);
     if (img != null) {
       scriptMountTarget.material.setMetallicMap(img);
+      scriptMountTarget.material.metallicPath = path;
       ui.debugConsole.addLog("Loaded Metallic Map to " + scriptMountTarget.name, 0);
     }
   }
@@ -785,9 +809,11 @@ void metallicMapSelected(File selection) {
 
 void roughnessMapSelected(File selection) {
   if (selection != null && scriptMountTarget != null) {
-    PImage img = loadImage(selection.getAbsolutePath());
+    String path = selection.getAbsolutePath();
+    PImage img = loadImage(path);
     if (img != null) {
       scriptMountTarget.material.setRoughnessMap(img);
+      scriptMountTarget.material.roughnessPath = path;
       ui.debugConsole.addLog("Loaded Roughness Map to " + scriptMountTarget.name, 0);
     }
   }
@@ -805,11 +831,23 @@ void envMapSelected(File selection) {
 
 void modelSelected(File selection) {
   if (selection != null && scriptMountTarget != null) {
-    PShape s = loadShape(selection.getAbsolutePath());
+    String path = selection.getAbsolutePath();
+    PShape s = loadShape(path);
     if (s != null) {
       scriptMountTarget.model = s;
+      scriptMountTarget.modelPath = path;
       scriptMountTarget.type = "Model";
       ui.debugConsole.addLog("Loaded Model OBJ to " + scriptMountTarget.name, 0);
     }
+  }
+}
+
+void folderSelectedForBuild(File selection) {
+  if (selection != null) {
+    Exporter exp = new Exporter(scene);
+    exp.build(selection.getAbsolutePath());
+    ui.debugConsole.addLog("Build Standalone Complete: " + selection.getAbsolutePath(), 0);
+  } else {
+    ui.debugConsole.addLog("Build Cancelled.", 1);
   }
 }

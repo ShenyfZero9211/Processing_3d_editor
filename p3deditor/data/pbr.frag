@@ -19,6 +19,7 @@ uniform bool hasRoughnessMap;
 // v0.8.0: IBL Environment
 uniform sampler2D envMap;
 uniform bool hasEnvMap;
+uniform float envMapIntensity; // v2.3: Global intensity control
 
 // v0.8.5: World-Space uniforms
 uniform vec3 cameraPos; // World camera position
@@ -173,12 +174,18 @@ void main() {
     if (hasEnvMap) {
         // v0.8.5: Use WORLD-SPACE reflection vector
         vec3 worldR = reflect(-worldV, worldN); 
+        float NdotV = max(dot(worldN, worldV), 0.0);
         
         // Specular IBL (Prefiltered color approximation)
         vec3 prefilteredColor = sampleIBL(envMap, worldR, rough);
+        vec3 F = FresnelSchlickRoughness(NdotV, F0, rough);
         
-        // v0.8.5: Ultra-wide Irradiance IBL (for solid Albedo look)
-        // We sample several offsets to get a truly diffuse "ambient" light
+        // Split-sum approximation: ensures reflections fade with roughness
+        float envBRDF_scale = clamp(1.0 - rough, 0.0, 1.0);
+        float envBRDF_bias = rough * 0.02; 
+        vec3 specularIBL = prefilteredColor * (F * envBRDF_scale + envBRDF_bias);
+        
+        // v0.8.5: Irradiance IBL (Diffuse ambient from environment)
         vec3 irradiance = sampleIBL(envMap, worldN, 1.0);
         irradiance += sampleIBL(envMap, worldN + vec3(0.2, 0, 0), 1.0);
         irradiance += sampleIBL(envMap, worldN + vec3(-0.2, 0, 0), 1.0);
@@ -186,23 +193,12 @@ void main() {
         irradiance += sampleIBL(envMap, worldN + vec3(0, -0.2, 0), 1.0);
         irradiance /= 5.0;
         
-        // v0.8.5: Karis / Epic Games BRDF Approximation
-        float NdotV = max(dot(worldN, worldV), 0.0);
-        vec3 F = FresnelSchlickRoughness(NdotV, F0, rough);
-        
-        // Env BRDF Approximation
-        float envBRDF_scale = 1.0 - rough;
-        float envBRDF_bias = rough * 0.05; // Reduced bias to tighten reflection
-        
-        // Master Balance: Allow Albedo to shine through non-metals more strongly
-        vec3 specularIBL = prefilteredColor * (F * envBRDF_scale + envBRDF_bias);
-        vec3 diffuseIBL = irradiance * baseAlbedo;
-        
         vec3 kS = F;
         vec3 kD = (vec3(1.0) - kS) * (1.0 - met);
+        vec3 diffuseIBL = irradiance * baseAlbedo;
         
-        // Energy compensation: ensure diffuse isn't washed out
-        ambient = (kD * diffuseIBL * 1.5 + specularIBL);
+        // Master Balance: Combined IBL contribution scaled by global intensity
+        ambient = (kD * diffuseIBL + specularIBL) * envMapIntensity;
     }
 
     vec3 color = ambient + Lo;

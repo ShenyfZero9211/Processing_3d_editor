@@ -1,12 +1,12 @@
 class Blueprint {
-  Entity owner;
+  Object owner; // Can be Entity or SceneManager
   ArrayList<VLBNode> nodes = new ArrayList<VLBNode>();
   ArrayList<VLBConnection> connections = new ArrayList<VLBConnection>();
   
   float offsetX = 0, offsetY = 0;
   float zoom = 1.0;
   
-  Blueprint(Entity owner) {
+  Blueprint(Object owner) {
     this.owner = owner;
     
     // Default Starting Nodes
@@ -72,9 +72,19 @@ class Blueprint {
     return sb.toString();
   }
   
-  // v1.3: Compile all event entry points into Entity's event map
+  // v1.3: Compile all event entry points into owner's event map
   void compileAllEvents() {
-    owner.blueprintEventPDES.clear();
+    if (owner == null) return;
+    
+    HashMap<String, String> targetMap = null;
+    if (owner instanceof Entity) {
+      targetMap = ((Entity)owner).blueprintEventPDES;
+    } else if (owner instanceof SceneManager) {
+      targetMap = ((SceneManager)owner).blueprintEventPDES;
+    }
+    
+    if (targetMap == null) return;
+    targetMap.clear();
     
     String[] eventTitles = {
       "Event: OnStart", "Event: OnUpdate", "Event: OnKeyPress",
@@ -86,13 +96,15 @@ class Blueprint {
       if (pdes != null) {
         // Map event title to runtime event key
         String key = evt.replace("Event: ", "");
-        owner.blueprintEventPDES.put(key, pdes);
+        targetMap.put(key, pdes);
       }
     }
     
-    // Legacy compatibility
-    if (owner.blueprintEventPDES.containsKey("OnStart")) {
-      owner.blueprintPDES = owner.blueprintEventPDES.get("OnStart");
+    // Legacy compatibility for legacy PDES fields
+    if (targetMap.containsKey("OnStart")) {
+      String startPdes = targetMap.get("OnStart");
+      if (owner instanceof Entity) ((Entity)owner).blueprintPDES = startPdes;
+      else if (owner instanceof SceneManager) ((SceneManager)owner).blueprintPDES = startPdes;
     }
   }
   
@@ -201,6 +213,16 @@ class Blueprint {
       String range = resolveData(n.findPin("Range", true));
       sb.append("intensity ").append(target).append(" ").append(intensity).append("\n");
       sb.append("range ").append(target).append(" ").append(range).append("\n");
+    } else if (n.title.equals("Set Background")) {
+      String r = resolveData(n.findPin("R", true));
+      String g = resolveData(n.findPin("G", true));
+      String b = resolveData(n.findPin("B", true));
+      sb.append("bg ").append(r).append(" ").append(g).append(" ").append(b).append("\n");
+    } else if (n.title.equals("Camera Teleport")) {
+      String x = resolveData(n.findPin("X", true));
+      String y = resolveData(n.findPin("Y", true));
+      String z = resolveData(n.findPin("Z", true));
+      sb.append("cam_tp ").append(x).append(" ").append(y).append(" ").append(z).append("\n");
     } else if (n.title.equals("Branch")) {
       String cond = resolveData(n.findPin("Condition", true));
       VLBPin truePin = n.findPin("True", false);

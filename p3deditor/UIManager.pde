@@ -51,6 +51,12 @@ class UIManager {
   boolean isEditingText() { return activeEditTarget > 0; }
   
   void commitEdit() {
+    if (activeEditTarget == 100) {
+      try { scene.envMapIntensity = max(0, Float.parseFloat(activeEditString)); } catch(Exception ex) {}
+      activeEditTarget = 0;
+      return;
+    }
+    
     if (activeEditTarget == 99) {
       debugConsole.addLog("> " + activeEditString, 0);
       consoleResult = interpreter.execute(activeEditString);
@@ -122,6 +128,7 @@ class UIManager {
     else if (id == 13) e.lightRange = max(10, e.lightRange + dir * 10.0f);
     else if (id == 14) e.material.metallic = constrain(e.material.metallic + dir * 0.05f, 0, 1);
     else if (id == 15) e.material.roughness = constrain(e.material.roughness + dir * 0.05f, 0, 1);
+    else if (id == 100) scene.envMapIntensity = max(0, scene.envMapIntensity + dir * 0.05f);
   }
   
   void handleTextEditKey() {
@@ -330,20 +337,32 @@ class UIManager {
       x += w;
     }
     
-    // v0.5.0: Play/Stop Toggle Button
-    float playX = width / 2 - 30;
-    boolean playHover = mouseX > playX && mouseX < playX + 60 && mouseY < menuBarHeight;
-    if (!activeMenu.isEmpty()) playHover = false;
-    
-    if (playHover) fill(80, 80, 90); else fill(40, 40, 45);
-    noStroke(); rect(playX, 4, 60, menuBarHeight - 8, 4);
-    
-    if (p3deditor.this.scene.isRuntime) {
-      fill(255, 100, 100); rect(playX + 22, 10, 16, 12, 2);
-      fill(255); textSize(10); textAlign(CENTER, CENTER); text("STOP", playX + 30, menuBarHeight/2);
+    // v2.0: Professional Mode Buttons
+    float centerX = width / 2;
+    if (scene.isPlaying()) {
+      // STOP BUTTON
+      float stopX = centerX - 30;
+      boolean stopHover = mouseX > stopX && mouseX < stopX + 60 && mouseY < menuBarHeight && activeMenu.isEmpty();
+      if (stopHover) fill(80, 80, 90); else fill(40, 40, 45);
+      noStroke(); rect(stopX, 4, 60, menuBarHeight - 8, 4);
+      fill(255, 100, 100); rect(stopX + 22, 10, 16, 12, 2);
+      fill(255); textSize(9); textAlign(CENTER, CENTER); text("STOP", stopX + 30, menuBarHeight/2 + 7);
     } else {
-      fill(100, 255, 100); triangle(playX + 25, 8, playX + 25, 22, playX + 40, 15);
-      fill(255); textSize(10); textAlign(CENTER, CENTER); text("PLAY", playX + 30, menuBarHeight/2 + 2);
+      // SIMULATE BUTTON (Amber)
+      float simX = centerX - 65;
+      boolean simHover = mouseX > simX && mouseX < simX + 60 && mouseY < menuBarHeight && activeMenu.isEmpty();
+      if (simHover) fill(80, 80, 90); else fill(45, 45, 55);
+      noStroke(); rect(simX, 4, 60, menuBarHeight - 8, 4);
+      fill(#FFB300); triangle(simX + 15, 9, simX + 15, 21, simX + 25, 15);
+      fill(230); textSize(9); textAlign(CENTER, CENTER); text("SIMULATE", simX + 30, menuBarHeight/2 + 7);
+      
+      // PLAY BUTTON (Blue)
+      float gameX = centerX + 5;
+      boolean gameHover = mouseX > gameX && mouseX < gameX + 60 && mouseY < menuBarHeight && activeMenu.isEmpty();
+      if (gameHover) fill(80, 80, 90); else fill(45, 45, 55);
+      noStroke(); rect(gameX, 4, 60, menuBarHeight - 8, 4);
+      fill(#4285F4); triangle(gameX + 15, 9, gameX + 15, 21, gameX + 25, 15);
+      fill(230); textSize(9); textAlign(CENTER, CENTER); text("PLAY", gameX + 30, menuBarHeight/2 + 7);
     }
     popStyle();
   }
@@ -495,7 +514,10 @@ class UIManager {
   void renderInspector() {
     p3deditor.this.hint(p3deditor.this.DISABLE_DEPTH_TEST);
     p3deditor.this.resetShader();
-    if (scene.selectedEntities.isEmpty()) return;
+    if (scene.selectedEntities.isEmpty()) {
+      renderGlobalSettings();
+      return;
+    }
     float panelX = width - panelWidth;
     pushStyle();
     // Sidebar Main Plate
@@ -685,15 +707,25 @@ class UIManager {
     
     // 0. Menu Bar Selection
     if (mouseY < menuBarHeight) {
-      // v0.5.0: Play/Stop Button Click
-      float playX = width / 2 - 30;
-      if (mouseX > playX && mouseX < playX + 60) {
-        if (p3deditor.this.scene.isRuntime) {
+      // v2.0: Multi-Mode Toolbar Hits
+      float centerX = width / 2;
+      if (p3deditor.this.scene.isPlaying()) {
+        float stopX = centerX - 30;
+        if (mouseX > stopX && mouseX < stopX + 60) {
           p3deditor.this.interpreter.execute("stop");
-        } else {
-          p3deditor.this.interpreter.execute("play");
+          return true;
         }
-        return true;
+      } else {
+        float simX = centerX - 65;
+        if (mouseX > simX && mouseX < simX + 60) {
+          p3deditor.this.interpreter.execute("play simulate");
+          return true;
+        }
+        float gameX = centerX + 5;
+        if (mouseX > gameX && mouseX < gameX + 60) {
+          p3deditor.this.interpreter.execute("play game");
+          return true;
+        }
       }
       
       float x = 10;
@@ -773,9 +805,10 @@ class UIManager {
         return true;
       }
       
-      // 4. Inspector Widget Clicks (Buttons, Fields) - MUST be checked before returning true
       if (!scene.selectedEntities.isEmpty()) {
         checkInspectorClicks();
+      } else {
+        checkGlobalSettingsClicks();
       }
       
       return true; // BREAK: Block all scene interaction through the Inspector panel
@@ -1112,7 +1145,7 @@ class UIManager {
   }
   
   String[] getItemsForMenu(String menu) {
-    if (menu.equals("File")) return new String[]{"New Scene", "Load Scene", "Save Scene", "Load Env Map"};
+    if (menu.equals("File")) return new String[]{"New Scene", "Load Scene", "Save Scene", "Load Env Map", "Build Standalone"};
     else if (menu.equals("Edit")) return new String[]{"Undo  [Ctrl+Z]", "Redo  [Ctrl+Y]", "Delete [Del]"};
     else if (menu.equals("Create")) return new String[]{"Cube", "Sphere", "Plane", "Point Light", "Import OBJ"};
     else if (menu.equals("Window")) return new String[]{"Toggle Console", "Toggle Stats", "Reset Camera"};
@@ -1137,6 +1170,8 @@ class UIManager {
       selectInput("Load Scene:", "fileSelectedForLoad");
     } else if (item.contains("Save Scene")) {
       p3deditor.this.selectOutput("Save Scene:", "fileSelectedForSave");
+    } else if (item.contains("Build Standalone")) {
+      p3deditor.this.selectFolder("Select Export Directory:", "folderSelectedForBuild");
     } else if (item.contains("Export")) {
        saveFrame("exports/screenshot-####.png");
        consoleResult = "SUCCESS: Exported screenshot";
@@ -1259,5 +1294,102 @@ class UIManager {
     if (scene.gizmo.mode == 4) modeText += "Select";
     text(modeText + "  |  Snap: " + (p3deditor.this.snapToGrid ? "ON [G]" : "OFF [G]") + "  |  UI: H/TAB", 270, 15 + menuBarHeight);
     popStyle();
+  }
+  
+  void renderGlobalSettings() {
+    float panelX = width - panelWidth;
+    pushStyle();
+    // Sidebar Main Plate
+    fill(25, 25, 28, 230); noStroke(); 
+    rect(panelX, menuBarHeight, panelWidth, height - menuBarHeight);
+    
+    // Header Area
+    fill(20, 20, 22, 230); noStroke(); 
+    rect(panelX, menuBarHeight, panelWidth, 30);
+    fill(180); textSize(11); textAlign(LEFT, CENTER);
+    text("Global Scene Settings", panelX + 15, menuBarHeight + 15);
+    stroke(60); line(panelX, menuBarHeight + 30, width, menuBarHeight + 30);
+    
+    // Vertical Divider
+    stroke(60); line(panelX, menuBarHeight, panelX, height - 30);
+    
+    float y = menuBarHeight + 70;
+    fill(180, 255, 180); text("Global Orchestration", panelX + 15, y);
+    
+    // Edit Level Blueprint Button
+    float btnX = panelX + 25;
+    float btnY = y + 25;
+    float btnW = panelWidth - 50;
+    float btnH = 30;
+    
+    boolean hoverBP = mouseX > btnX && mouseX < btnX + btnW && mouseY > btnY && mouseY < btnY + btnH;
+    fill(hoverBP ? color(60, 80, 160) : color(40, 50, 100));
+    stroke(hoverBP ? 120 : 80);
+    rect(btnX, btnY, btnW, btnH, 4);
+    fill(255); textAlign(CENTER, CENTER);
+    text("EDIT LEVEL BLUEPRINT", btnX + btnW/2, btnY + btnH/2);
+    
+    // Background Color swatch
+    y += 85;
+    textAlign(LEFT, CENTER);
+    fill(180, 255, 180); text("Environmental Settings", panelX + 15, y);
+    
+    float swatchY = y + 15;
+    fill(120); textSize(10); textAlign(LEFT, CENTER);
+    text("Background Color", panelX + 25, swatchY + 10);
+    int bgCol = scene.backgroundColor;
+    // Draw colored swatch
+    fill(bgCol); stroke(150); strokeWeight(1);
+    rect(panelX + 140, swatchY, 30, 20, 3);
+    // Print hex value
+    fill(160); textAlign(LEFT, CENTER); textSize(10);
+    String hexStr = String.format("#%02X%02X%02X", (int)red(bgCol), (int)green(bgCol), (int)blue(bgCol));
+    text(hexStr, panelX + 175, swatchY + 10);
+    
+    // Help instructions at bottom
+    fill(100); textSize(10); textAlign(CENTER, BOTTOM);
+    text("Level Blueprints run scene-wide logic", panelX + panelWidth/2, height - 45);
+    
+    popStyle();
+  }
+  
+  void checkGlobalSettingsClicks() {
+    float panelX = width - panelWidth;
+    
+    // 1. Edit Level Blueprint Button
+    float lbBtnX = panelX + 25;
+    float lbBtnY = menuBarHeight + 70 + 25;
+    float lbBtnW = panelWidth - 50;
+    float lbBtnH = 30;
+    
+    if (mouseX > lbBtnX && mouseX < lbBtnX + lbBtnW && mouseY > lbBtnY && mouseY < lbBtnY + lbBtnH) {
+      vlbEditor.openBP(scene.levelBlueprint);
+      return;
+    }
+    
+    // 2. Background Color (Open Color Picker)
+    float swatchX = panelX + 140;
+    float iy = menuBarHeight + 70 + 85 + 15;
+    if (mouseX > swatchX && mouseX < swatchX + 30 && mouseY > iy && mouseY < iy + 20) {
+      new Thread(new Runnable() {
+        public void run() {
+          java.awt.Color initial = new java.awt.Color((int)p3deditor.this.red(scene.backgroundColor), (int)p3deditor.this.green(scene.backgroundColor), (int)p3deditor.this.blue(scene.backgroundColor));
+          
+          javax.swing.JColorChooser chooser = new javax.swing.JColorChooser(initial);
+          javax.swing.JDialog dialog = javax.swing.JColorChooser.createDialog(null, "Select Background Color", false, chooser, 
+            new java.awt.event.ActionListener() {
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                java.awt.Color selected = chooser.getColor();
+                if (selected != null) {
+                  scene.backgroundColor = color(selected.getRed(), selected.getGreen(), selected.getBlue());
+                }
+              }
+            }, null);
+          dialog.setAlwaysOnTop(true);
+          dialog.setVisible(true);
+        }
+      }).start();
+      return;
+    }
   }
 }

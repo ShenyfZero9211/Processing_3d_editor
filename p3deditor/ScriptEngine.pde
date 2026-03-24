@@ -16,9 +16,9 @@ class ScriptContext {
   
   long waitUntil = 0;
   boolean terminated = false;
-  Entity contextEntity = null; // v0.5.0: The entity this script is mounted on
+  Object contextEntity = null; // v0.5.0: The entity or scene this script is mounted on
   
-  ScriptContext(String name, String[] rawLines, Entity context) {
+  ScriptContext(String name, String[] rawLines, Object context) {
     this.scriptName = name;
     this.lines = rawLines;
     this.contextEntity = context;
@@ -321,9 +321,10 @@ class ScriptContext {
   }
   
   String substituteVariables(String text) {
-    // v0.5.0: Handle $this context
-    if (contextEntity != null) {
-      String ename = contextEntity.name;
+    // v0.5.0: Handle $this context (Only for Entities)
+    if (contextEntity instanceof Entity) {
+      Entity e = (Entity)contextEntity;
+      String ename = e.name;
       // If the entity name contains spaces, wrap it in quotes so parseArgs treats it as one token
       if (ename.contains(" ")) {
         ename = "\"" + ename + "\"";
@@ -331,15 +332,19 @@ class ScriptContext {
       text = text.replace("$this", ename);
       
       // v0.6.0: Local Properties mapping
-      if (text.contains("$px")) text = text.replace("$px", String.valueOf(contextEntity.transform.position.x));
-      if (text.contains("$py")) text = text.replace("$py", String.valueOf(contextEntity.transform.position.y));
-      if (text.contains("$pz")) text = text.replace("$pz", String.valueOf(contextEntity.transform.position.z));
-      if (text.contains("$rx")) text = text.replace("$rx", String.valueOf(contextEntity.transform.rotation.x));
-      if (text.contains("$ry")) text = text.replace("$ry", String.valueOf(contextEntity.transform.rotation.y));
-      if (text.contains("$rz")) text = text.replace("$rz", String.valueOf(contextEntity.transform.rotation.z));
-      if (text.contains("$sx")) text = text.replace("$sx", String.valueOf(contextEntity.transform.scale.x));
-      if (text.contains("$sy")) text = text.replace("$sy", String.valueOf(contextEntity.transform.scale.y));
-      if (text.contains("$sz")) text = text.replace("$sz", String.valueOf(contextEntity.transform.scale.z));
+      if (text.contains("$px")) text = text.replace("$px", String.valueOf(e.transform.position.x));
+      if (text.contains("$py")) text = text.replace("$py", String.valueOf(e.transform.position.y));
+      if (text.contains("$pz")) text = text.replace("$pz", String.valueOf(e.transform.position.z));
+      if (text.contains("$rx")) text = text.replace("$rx", String.valueOf(e.transform.rotation.x));
+      if (text.contains("$ry")) text = text.replace("$ry", String.valueOf(e.transform.rotation.y));
+      if (text.contains("$rz")) text = text.replace("$rz", String.valueOf(e.transform.rotation.z));
+      if (text.contains("$sx")) text = text.replace("$sx", String.valueOf(e.transform.scale.x));
+      if (text.contains("$sy")) text = text.replace("$sy", String.valueOf(e.transform.scale.y));
+      if (text.contains("$sz")) text = text.replace("$sz", String.valueOf(e.transform.scale.z));
+      if (text.contains("$dt")) text = text.replace("$dt", String.valueOf(1.0f/p3deditor.this.frameRate));
+    } else {
+      // For Global/Level context, $this could resolve to "level" if needed
+      text = text.replace("$this", "level");
       if (text.contains("$dt")) text = text.replace("$dt", String.valueOf(1.0f/p3deditor.this.frameRate));
     }
     
@@ -371,23 +376,25 @@ class ScriptManager {
   ArrayList<ScriptContext> activeScripts = new ArrayList<ScriptContext>();
   CommandInterpreter interpreter;
   
-  // v1.8: Cache variables per entity for debugging and UI persistence
-  HashMap<Entity, HashMap<String, Float>> debugVariables = new HashMap<Entity, HashMap<String, Float>>();
+  // v1.8: Cache variables per owner for debugging and UI persistence
+  HashMap<Object, HashMap<String, Float>> debugVariables = new HashMap<Object, HashMap<String, Float>>();
   
   ScriptManager(CommandInterpreter interpreter) {
     this.interpreter = interpreter;
   }
   
-  void syncDebugVars(Entity e, Map<String, Float> vars) {
-    if (e == null) return;
+  void syncDebugVars(Object e, Map<String, Float> vars) {
+    // Allows null for global/level variables
     if (!debugVariables.containsKey(e)) debugVariables.put(e, new HashMap<String, Float>());
     debugVariables.get(e).putAll(vars);
   }
   
-  void runScript(String name, String content, Entity context) {
+  void runScript(String name, String content, Object context) {
     String[] lines = content.split("\\r?\\n");
     activeScripts.add(new ScriptContext(name, lines, context));
-    System.out.println("P3DES: Started script " + name + (context != null ? " on " + context.name : ""));
+    String contextName = "Global Scene";
+    if (context instanceof Entity) contextName = ((Entity)context).name;
+    System.out.println("P3DES: Started script " + name + " on " + contextName);
   }
   
   void update() {
@@ -405,8 +412,8 @@ class ScriptManager {
     activeScripts.clear();
   }
   
-  // v1.8: Force stop scripts for a specific entity (for hot-reload)
-  void stopScriptEntity(Entity e) {
+  // v1.8: Force stop scripts for a specific owner (for hot-reload)
+  void stopScriptEntity(Object e) {
     for (int i = activeScripts.size() - 1; i >= 0; i--) {
       if (activeScripts.get(i).contextEntity == e) {
         activeScripts.remove(i);
@@ -414,7 +421,7 @@ class ScriptManager {
     }
   }
   
-  boolean isEntityExecuting(Entity e, String scriptTitle) {
+  boolean isEntityExecuting(Object e, String scriptTitle) {
      for (ScriptContext sc : activeScripts) {
        if (sc.contextEntity == e && sc.scriptName.equals(scriptTitle)) return true;
      }
@@ -422,7 +429,7 @@ class ScriptManager {
   }
   
   // v1.8: Get live variable value for debugging
-  float getVariableValue(Entity e, String varName) {
+  float getVariableValue(Object e, String varName) {
     // Check with and without $ prefix
     String cleanName = varName.startsWith("$") ? varName.substring(1) : varName;
     // Check cache first for persistence even after script ends

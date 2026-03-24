@@ -32,7 +32,7 @@ class BlueprintEditor {
   // v1.0: Categorized Node Menu
   String[] menuCategories = { "— Action —", "— Logic —", "— Math —", "— Data —", "— Event —", "— Value —" };
   String[][] menuItems = {
-    { "Action: Wait", "Action: Log", "Action: Print", "Action: Set Position", "Action: Spawn Entity", "Action: Set Visibility", "Action: Light Settings", "Action: Get Visibility" },
+    { "Action: Wait", "Action: Log", "Action: Print", "Action: Set Position", "Action: Spawn Entity", "Action: Set Visibility", "Action: Light Settings", "Action: Set Background", "Action: Camera Teleport", "Action: Get Visibility" },
     { "Logic: Branch", "Logic: Compare", "Logic: Counter", "Logic: AND", "Logic: OR", "Logic: NOT" },
     { "Math: Add", "Math: Subtract", "Math: Multiply", "Math: Divide" },
     { "Data: Math Expression", "Data: Get Position", "Data: Random", "Data: Time" },
@@ -49,7 +49,7 @@ class BlueprintEditor {
     panY = height / 2;
   }
   
-  void open(Blueprint bp) {
+  void openBP(Blueprint bp) {
     this.activeBlueprint = bp;
     this.visible = true;
   }
@@ -140,7 +140,10 @@ class BlueprintEditor {
     // 4. Header Overlay
     fill(35, 35, 40); noStroke(); rect(0, 0, width, 40);
     fill(255); textSize(14); textAlign(LEFT, CENTER);
-    text("Blueprint Editor: " + activeBlueprint.owner.name, 20, 20);
+    String ownerName = "Unknown";
+    if (activeBlueprint.owner instanceof Entity) ownerName = ((Entity)activeBlueprint.owner).name;
+    else if (activeBlueprint.owner instanceof SceneManager) ownerName = "Global Scene";
+    text("Blueprint Editor: " + ownerName, 20, 20);
     
     // v1.0: Build & Run Button with compile flash
     float runX = width - 150;
@@ -361,18 +364,26 @@ class BlueprintEditor {
     float runX = width - 150;
     if (mouseX > runX && mouseX < runX + 100 && mouseY > 10 && mouseY < 35) {
       String pdes = activeBlueprint.generatePDES();
-      activeBlueprint.owner.blueprintPDES = pdes;
+      
+      // Store in entity if applicable
+      if (activeBlueprint.owner instanceof Entity) {
+        ((Entity)activeBlueprint.owner).blueprintPDES = pdes;
+      }
       
       // v1.8: Hot-reload if in Play Mode
-      if (p3deditor.this.scene.isRuntime) {
-        String scriptTitle = "VLB_Runtime_" + activeBlueprint.owner.id;
+      if (p3deditor.this.scene.isPlaying()) {
+        String scriptTitle = "VLB_Runtime_";
+        if (activeBlueprint.owner instanceof Entity) scriptTitle += ((Entity)activeBlueprint.owner).id;
+        else scriptTitle += "Level";
+        
         p3deditor.this.scriptManager.stopScriptEntity(activeBlueprint.owner);
         p3deditor.this.scriptManager.runScript(scriptTitle, pdes, activeBlueprint.owner);
       }
       
       compileFlashTime = millis();
       compileStatus = "Compiled & Hot-Reloaded (" + pdes.length() + " bytes)";
-      p3deditor.this.ui.debugConsole.addLog("SUCCESS: Blueprint compiled & updated for " + activeBlueprint.owner.name, 1);
+      String ownerLogName = (activeBlueprint.owner instanceof Entity) ? ((Entity)activeBlueprint.owner).name : "Global Scene";
+      p3deditor.this.ui.debugConsole.addLog("SUCCESS: Blueprint compiled & updated for " + ownerLogName, 1);
       return;
     }
     
