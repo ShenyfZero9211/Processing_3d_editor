@@ -1,7 +1,7 @@
 /**
  * VLBNode.pde - Visual Logic Component Models
  * 
- * Version: v0.4.9
+ * Version: v0.5.0
  * Responsibilities:
  * - Defines the data structure for 'Nodes' and 'Pins' in the VLB system.
  * - Implements automated layout calculation for nodes.

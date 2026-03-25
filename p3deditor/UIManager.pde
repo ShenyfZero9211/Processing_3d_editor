@@ -1,7 +1,7 @@
 /**
  * UIManager - The Graphical Interface & HUD System
  * 
- * Version: v0.4.9
+ * Version: v0.5.0
  * Responsibilities:
  * - Renders the dual-panel editor interface (Hierarchy & Inspector).
  * - Manages the top Menu Bar and context-sensitive dropdowns.

@@ -6,7 +6,7 @@
  * lifecycle (setup/draw), global input routing, multi-viewport logic, and coordination
  * between the Scene, UI, and Scripting systems.
  * 
- * Version: v0.4.9 (Stable Milestone)
+ * Version: v0.5.0 (Stable Milestone)
  * Developers: SharpEye & Antigravity
  * 
  * ALGORITHM: Main Loop Execution
@@ -99,7 +99,7 @@ PGraphics pickerBuffer;
  * setup() - Engine Initialization
  * 
  * - Configures window size (1280x720) and P3D renderer.
- * - Initializes font system with fallback support for Chinese characters.
+ * - Initializes font system with English font support.
  * - Bootstraps all core managers (Scene, UI, Camera, Scripting).
  * - Loads native PBR shaders and creates default scene entities.
  */
@@ -108,14 +108,8 @@ void setup() {
   hint(ENABLE_TEXTURE_MIPMAPS);
   surface.setLocation((displayWidth - width) / 2, (displayHeight - height) / 2);
   
-  // Initialize Fonts: Consolas for English/Code, Heiti for Chinese (size 12 for pro look)
-  java.awt.Font testFont = new java.awt.Font("Consolas", java.awt.Font.PLAIN, 12);
-  if (testFont.canDisplay('ä¸?)) {
-    mainFont = createFont("Consolas", 12, true); 
-  } else {
-    mainFont = createFont("Microsoft YaHei", 12, true); 
-  }
-  if (mainFont == null) mainFont = createFont("SimHei", 12, true);
+  // Initialize Fonts: Consolas (size 12 for pro look)
+  mainFont = createFont("Consolas", 12, true);
   if (mainFont == null) mainFont = createFont("SansSerif", 12, true);
   textFont(mainFont);
   
@@ -167,6 +161,7 @@ void draw() {
   editorCamera.update(keyStates); // Process WASD movement frame by frame
   
   // Apply camera
+  editorCamera.update(keyStates);
   editorCamera.apply(this);
   
   // Dynamic Scene Lighting (Capped at 5 to prevent Processing crash, plus global lights)
@@ -234,10 +229,6 @@ void draw() {
   // We can't use clearDepth() directly so we rely on the hint and drawing order.
   // To be bulletproof, we reset the style as well.
   pushStyle();
-  
-
-  
-
   
   // Box Select GUI Screen Overlay
   if (isBoxSelecting) {
@@ -327,7 +318,6 @@ void draw() {
   }
   
   // v0.6.0: OSC TELEMETRY AUTO-BROADCAST (60FPS)
-  // We send the latest coordinates of every entity independently via UDP.
   if (oscTelemetryEnabled && oscClient.isConnected) {
      for (Entity e : scene.entities) {
         OSCMessage msg = new OSCMessage("/p3de/" + e.name.replace(" ", "_") + "/transform");
@@ -525,11 +515,8 @@ void mouseDragged() {
       if (scene.useLocalSpace && scene.selectedEntities.size() == 1) {
          Entity e = scene.selectedEntities.get(0);
          PMatrix3D wm = e.getWorldMatrix();
-         // Multiply matrix by the local axis (as a direction vector, w=0)
          PVector worldAxis = new PVector();
          wm.mult(axisW, worldAxis);
-         // The world axis length will be scaled by the entity's scale, 
-         // so we normalize to get just the direction.
          axisW = worldAxis.normalize();
       }
       
@@ -607,12 +594,10 @@ void mouseDragged() {
         m.rotateZ(startDragRot.z);
 
         if (scene.useLocalSpace) {
-          // Local rotation: M_new = M_old * R_local_delta
           if (draggingAxis == 1) m.rotateX(angle);
           if (draggingAxis == 2) m.rotateY(angle);
           if (draggingAxis == 3) m.rotateZ(angle);
         } else {
-          // World rotation: M_new = R_world_delta * M_old
           PMatrix3D rDelta = new PMatrix3D();
           if (draggingAxis == 1) rDelta.rotateX(angle);
           if (draggingAxis == 2) rDelta.rotateY(angle);
@@ -629,16 +614,6 @@ void mouseDragged() {
   editorCamera.handleMouseDragged(isAltDown);
 }
 
-/**
- * [ALGORITHM] worldToScreen()
- * 
- * Converts a 3D World Space vector to 2D Screen Space coordinates using
- * manually managed Projection and ModelView matrices. This is essential
- * for overlaying 2D UI (labels, box select) precisely over 3D objects.
- * 
- * @param w The 3D world position to convert.
- * @return  A PVector where x, y are screen pixels and z is depth value (-1 to 1).
- */
 PVector worldToScreen(PVector w) {
   float[] world = {w.x, w.y, w.z, 1};
   float[] eye = new float[4];
@@ -697,11 +672,11 @@ void mouseReleased() {
     float y1 = min(boxSelectStartY, mouseY);
     float y2 = max(boxSelectStartY, mouseY);
     
-    if (dist(x1, y1, x2, y2) > 5) { // Reject tiny tremors masking clicking 
+    if (dist(x1, y1, x2, y2) > 5) {
       if (!isCtrlDown) scene.clearSelection();
       for (Entity e : scene.entities) {
         PVector s = worldToScreen(e.transform.position);
-        if (s.z > -1 && s.z < 1) { // Validate mathematically in bounded clipping volume
+        if (s.z > -1 && s.z < 1) {
           if (s.x >= x1 && s.x <= x2 && s.y >= y1 && s.y <= y2) {
             scene.selectEntity(e, true);
           }
@@ -726,7 +701,6 @@ void mouseWheel(MouseEvent event) {
 }
 
 void keyPressed() {
-  // v2.0: Game Mode Shortcut Protection
   if (scene.engineMode == SceneManager.MODE_GAME) {
     if (key == ESC) {
       interpreter.execute("stop");
@@ -740,67 +714,52 @@ void keyPressed() {
     if (key == ESC) { vlbEditor.visible = false; key = 0; }
     return;
   }
-  // 1. Debug Console has absolute priority
   if (ui.debugConsole.active) {
     ui.handleKeyPressed();
     if (key == ESC) key = 0;
     return;
   }
   
-  // 2. Inspector Text Editing
   if (ui.isEditingText()) {
     ui.handleTextEditKey();
     if (key == ESC) key = 0;
     return;
   }
   
-  // Global Shortcuts (not in text edit mode)
-  if (keyCode == ALT) { isAltDown = true; println("Alt Down"); }
-  if (keyCode == SHIFT) { keyStates[SHIFT] = true; println("Shift Down"); }
+  if (keyCode == ALT) { isAltDown = true; }
+  if (keyCode == SHIFT) { keyStates[SHIFT] = true; }
   if (keyCode == CONTROL || keyCode == 157 || keyCode == 91 || (key != CODED && key == 17)) { 
      isCtrlDown = true; 
-     println("Control Down"); 
   }
   if (keyCode < 256) keyStates[keyCode] = true;
   
-  // Transform Modes
-  if (key == '1') { scene.gizmo.mode = 1; println("Mode: Translate"); }
-  if (key == '2') { scene.gizmo.mode = 2; println("Mode: Rotate"); }
-  if (key == '3') { scene.gizmo.mode = 3; println("Mode: Scale"); }
-  if (key == '4') { scene.gizmo.mode = 4; println("Mode: Select"); }
+  if (key == '1') { scene.gizmo.mode = 1; }
+  if (key == '2') { scene.gizmo.mode = 2; }
+  if (key == '3') { scene.gizmo.mode = 3; }
+  if (key == '4') { scene.gizmo.mode = 4; }
   
-  // Snapping Toggle
   if (key == 'g' || key == 'G') {
     snapToGrid = !snapToGrid;
   }
   
-  // Coordinate Space Toggle
   if (key == 'l' || key == 'L') {
     scene.useLocalSpace = !scene.useLocalSpace;
-    println("Coordinate Space: " + (scene.useLocalSpace ? "LOCAL" : "WORLD"));
   }
   
-  // UI Visibility Toggle
   if (key == 'h' || key == 'H' || key == TAB) {
     showUI = !showUI;
   }
   
   if (isCtrlDown) {
-    // Determine Undo/Redo correctly
-    boolean isZ = (keyCode == 'Z' || (int)key == 26 || (int)key == 122); // 'z' is 122, SUB is 26
+    boolean isZ = (keyCode == 'Z' || (int)key == 26 || (int)key == 122);
     boolean isY = (keyCode == 'Y' || (int)key == 25 || (int)key == 121);
     
     if (isZ && !keyStates[SHIFT]) {
        scene.undoManager.undo();
-       debugText = "Action Undone";
-       println("Undo Triggered");
     } else if ((isZ && keyStates[SHIFT]) || isY) {
        scene.undoManager.redo();
-       debugText = "Action Redone";
-       println("Redo Triggered");
     }
     
-    // Note: Java/Processing captures CTRL+C as ASCII(3) and CTRL+V as ASCII(22) instead of the literal characters
     if (keyCode == 67 || key == 'c' || key == 'C' || key == 3) {
       ui.copySelection();
     }
@@ -813,11 +772,10 @@ void keyPressed() {
 }
 
 void keyReleased() {
-  if (keyCode == ALT) { isAltDown = false; println("Alt Up"); }
-  if (keyCode == SHIFT) { keyStates[SHIFT] = false; println("Shift Up"); }
+  if (keyCode == ALT) { isAltDown = false; }
+  if (keyCode == SHIFT) { keyStates[SHIFT] = false; }
   if (keyCode == CONTROL || keyCode == 157 || keyCode == 91 || (key != CODED && key == 17)) {
      isCtrlDown = false; 
-     println("Control Up"); 
   }
   if (keyCode < 256) keyStates[keyCode] = false;
 }
@@ -834,7 +792,6 @@ void fileSelectedForSave(File selection) {
   }
 }
 
-// Variables to hold state for script mounting UI
 Entity scriptMountTarget = null;
 String scriptMountEvent = "";
 
@@ -842,13 +799,9 @@ void fileSelectedForScript(File selection) {
   if (selection != null && scriptMountTarget != null) {
     String scriptName = selection.getName();
     scriptMountTarget.mount(scriptMountEvent, scriptName);
-    ui.debugConsole.addLog("Mounted script '" + scriptName + "' to [" + scriptMountEvent + "] on " + scriptMountTarget.name, 0);
-  } else if (selection == null) {
-    ui.debugConsole.addLog("Script selection cancelled.", 1);
   }
 }
 
-// v0.8.0: Asset Loading Callbacks
 void albedoMapSelected(File selection) {
   if (selection != null && scriptMountTarget != null) {
     String path = selection.getAbsolutePath();
@@ -856,7 +809,6 @@ void albedoMapSelected(File selection) {
     if (img != null) {
       scriptMountTarget.material.setAlbedoMap(img);
       scriptMountTarget.material.albedoPath = path;
-      ui.debugConsole.addLog("Loaded Albedo Map to " + scriptMountTarget.name, 0);
     }
   }
 }
@@ -868,7 +820,6 @@ void metallicMapSelected(File selection) {
     if (img != null) {
       scriptMountTarget.material.setMetallicMap(img);
       scriptMountTarget.material.metallicPath = path;
-      ui.debugConsole.addLog("Loaded Metallic Map to " + scriptMountTarget.name, 0);
     }
   }
 }
@@ -880,7 +831,6 @@ void roughnessMapSelected(File selection) {
     if (img != null) {
       scriptMountTarget.material.setRoughnessMap(img);
       scriptMountTarget.material.roughnessPath = path;
-      ui.debugConsole.addLog("Loaded Roughness Map to " + scriptMountTarget.name, 0);
     }
   }
 }
@@ -890,7 +840,6 @@ void envMapSelected(File selection) {
     PImage img = loadImage(selection.getAbsolutePath());
     if (img != null) {
       scene.envMap = img;
-      ui.debugConsole.addLog("Loaded Global Environment Map", 0);
     }
   }
 }
@@ -903,7 +852,6 @@ void modelSelected(File selection) {
       scriptMountTarget.model = s;
       scriptMountTarget.modelPath = path;
       scriptMountTarget.type = "Model";
-      ui.debugConsole.addLog("Loaded Model OBJ to " + scriptMountTarget.name, 0);
     }
   }
 }
@@ -912,8 +860,5 @@ void folderSelectedForBuild(File selection) {
   if (selection != null) {
     Exporter exp = new Exporter(scene);
     exp.build(selection.getAbsolutePath());
-    ui.debugConsole.addLog("Build Standalone Complete: " + selection.getAbsolutePath(), 0);
-  } else {
-    ui.debugConsole.addLog("Build Cancelled.", 1);
   }
 }

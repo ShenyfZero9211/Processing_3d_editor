@@ -1,13 +1,13 @@
-# P3DE Logic-Script (.p3des) 官方演示
-# 该脚本演示：异步延时、变量运算、While/For 循环与条件判断
+# P3DE Logic-Script (.p3des) Official Demo
+# This script demonstrates: async delay, variable operations, While/For loops, and conditional logic
 
-# 建议加上 clear 指令，确保脚本每次重连都能从净空环境开始，避免超出 5 盏灯上限
+# Recommendation: use 'clear' to ensure every run starts from a clean environment, avoiding the 5-light limit.
 clear
-echo "P3DES: 演示脚本开始启动..."
+echo "P3DES: Demo script starting..."
 set x -200
 set i 0
 
-# 1. 使用 While 循环生成一排蓝色方块
+# 1. Use While loop to generate a row of blue cubes
 while $i < 5
   create cube
   rename Cube "Cube_$i"
@@ -19,9 +19,9 @@ while $i < 5
   wait 500
 endwhile
 
-# 2. 使用 If 进行条件分支判断
+# 2. Use If for conditional branching
 if $i == 5
-  echo "P3DES: 第一阶段达成，正在生成中心球体..."
+  echo "P3DES: Phase 1 complete, generating central sphere..."
   wait 1000
   create sphere
   rename Sphere "MainCore"
@@ -31,7 +31,7 @@ if $i == 5
   wait 800
 endif
 
-# 3. 使用 For 循环精准布置灯光阵列
+# 3. Use For loop for precise light array placement
 for k -100 150 50
   create light
   rename Light "Light_$k"
@@ -39,4 +39,4 @@ for k -100 150 50
   wait 300
 endfor
 
-echo "P3DES: 演示脚本执行完毕！"
+echo "P3DES: Demo script execution complete!"

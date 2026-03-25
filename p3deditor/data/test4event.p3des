@@ -2,9 +2,9 @@
 # This script is designed to be mounted to any entity using 'mount'
 # Example: mount Cube_0 onClick v0.5.0_test.p3des
 
-echo "[$this] 事件已触发！开始执行交互逻辑..."
+echo "[$this] Event triggered! Executing interaction logic..."
 
-# 执行一段简单的跳跃动画
+# Execute a simple jumping animation
 move $this 0 -50 0
 wait 200
 move $this 0 50 0
@@ -13,4 +13,4 @@ move $this 0 -30 0
 wait 150
 move $this 0 30 0
 
-echo "[$this] 交互完成。请点击 STOP 按钮观察场景还原。"
+echo "[$this] Interaction complete. Click STOP to reset scene."

@@ -1,7 +1,7 @@
 /**
  * VLBNodeLibrary.pde - Visual Logic Registry
  * 
- * Version: v0.4.9
+ * Version: v0.5.0
  * Responsibilities:
  * - Serves as a 'Factory' for pre-configuring all available node types.
  * - Defines the pin layout, default values, and headers for 40+ logic blocks.
