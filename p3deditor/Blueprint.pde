@@ -1,3 +1,14 @@
+/**
+ * Blueprint.pde - Visual Logic Container
+ * 
+ * Version: v0.4.9
+ * Responsibilities:
+ * - Manages a graph of VLB nodes and connections for an entity or level.
+ * - Implements the transpilation engine that converts visual nodes into PDES 
+ *   assembly script.
+ * - Handles event-specific PDES generation (OnStart, OnUpdate, etc.).
+ * - Manages node spatial organization (Offset/Zoom).
+ */
 class Blueprint {
   Object owner; // Can be Entity or SceneManager
   ArrayList<VLBNode> nodes = new ArrayList<VLBNode>();
@@ -47,6 +58,15 @@ class Blueprint {
     dst.connectedTo = src;
   }
   
+  /**
+   * generatePDES() - Transpilation Hub
+   * 
+   * [ALGORITHM] VLB to PDES Conversion
+   * This is the heart of the Visual Logic System. It traverses the node graph 
+   * starting from 'Event: OnStart' and recursively emits PDES commands.
+   * It ensures that data-dependency nodes (Math, GetPos) are emitted BEFORE 
+   * the flow nodes (Log, SetPos) that consume them.
+   */
   String generatePDES() {
     VLBNode startNode = null;
     for (VLBNode n : nodes) if (n.title.equals("Event: OnStart")) { startNode = n; break; }
@@ -108,7 +128,15 @@ class Blueprint {
     }
   }
   
-  // v1.4: Recursively emit commands for data-only nodes that have no flow pins
+  /**
+   * [ALGORITHM] emitDataDeps() - Recursive Dependency Emission
+   * 
+   * For a given flow node, this function finds all connected input data pins, 
+   * traces them back to their source nodes (e.g., an 'Add' node), and recursively 
+   * emits the script commands needed to calculate those values. 
+   * Results are stored in temporary variables ($add_12, $pos_x_5) for the 
+   * consumer to use.
+   */
   void emitDataDeps(VLBNode n, StringBuilder sb, HashSet<Integer> visited) {
     if (n == null || visited.contains(n.id)) return;
     // Only process data-producing nodes (no flow input)
@@ -171,6 +199,16 @@ class Blueprint {
     }
   }
   
+  /**
+   * [ALGORITHM] traverseNode() - Control Flow Generation
+   * 
+   * Performs a linear traversal of the flow-carrying nodes in the graph.
+   * 1. Assigns a PDES label (:node_ID) to the current segment.
+   * 2. Calls emitDataDeps to prepare all necessary input variables.
+   * 3. Maps the visual node type to its corresponding PDES command (tp, spawn, echo, etc.).
+   * 4. Follows the output flow pin to the next node in the chain.
+   * 5. Special Case: Branch nodes emit 'if/else/goto' logic instead of linear fallthrough.
+   */
   void traverseNode(VLBNode n, StringBuilder sb, HashSet<Integer> visited) {
     if (n == null) return;
     visited.add(n.id);
@@ -362,6 +400,15 @@ class Blueprint {
     }
   }
   
+  /**
+   * resolveData() - Pin Value Binding
+   * 
+   * [ALGORITHM] Variable Reference Mapping
+   * Determines what string should represent a pin's value in the final script.
+   * - If disconnected: Returns the pin's literal value (10.0, "Hello").
+   * - If connected: Returns a variable reference ($res_ID, $pos_x_ID) that 
+   *   points to the pre-emitted calculation result of the source node.
+   */
   String resolveData(VLBPin p) {
     if (p == null) return "0";
     // v1.1: Follow connected data pins to their source

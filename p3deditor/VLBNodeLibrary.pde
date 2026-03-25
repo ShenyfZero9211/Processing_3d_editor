@@ -1,5 +1,22 @@
-// VLBNodeLibrary.pde - Factory for pre-configured logic nodes
+/**
+ * VLBNodeLibrary.pde - Visual Logic Registry
+ * 
+ * Version: v0.4.9
+ * Responsibilities:
+ * - Serves as a 'Factory' for pre-configuring all available node types.
+ * - Defines the pin layout, default values, and headers for 40+ logic blocks.
+ * - Categorizes nodes into Action, Logic, Data, Math, Event, and Value.
+ */
+// Factory for pre-configured logic nodes
 
+/**
+ * createVLBNode() - Selective Factory
+ * 
+ * [ALGORITHM] String-to-Object Injection
+ * Instantiates and configures a VLBNode based on a categorical type name 
+ * (e.g. "Action: Set Position"). It manually adds all necessary input/output 
+ * pins and sets reasonable default values for immediate usability.
+ */
 VLBNode createVLBNode(String typeName, int id, float x, float y) {
   // === ACTION NODES ===
   if (typeName.equals("Action: Wait")) {

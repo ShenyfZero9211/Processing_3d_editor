@@ -1,10 +1,21 @@
+/**
+ * SceneManager - The Central Engine Hub
+ * 
+ * Version: v0.4.9
+ * Responsibilities:
+ * - Maintains the lifecycle of all entities in the scene.
+ * - Manages selection and 3D transformation gizmos.
+ * - Handles scene-wide rendering passes and light data synchronization (PBR).
+ * - Orchestrates Undo/Redo logic and persistent storage (JSON).
+ * - Manages 'Engine Modes' (Edit, Simulate, Game).
+ */
 class SceneManager {
   ArrayList<Entity> entities = new ArrayList<Entity>();
   ArrayList<Entity> selectedEntities = new ArrayList<Entity>();
   Gizmo gizmo = new Gizmo();
   int nextEntityId = 1;
   UndoManager undoManager = new UndoManager();
-  boolean useLocalSpace = false; // Default to World as requested
+  boolean useLocalSpace = false; 
   Entity lastHoveredEntity = null;
   
   // v2.0: Engine Mode System
@@ -28,6 +39,14 @@ class SceneManager {
   String blueprintPDES = "";
   HashMap<String, String> blueprintEventPDES = new HashMap<String, String>();
   
+  /**
+   * saveSnapshot() / restoreSnapshot()
+   * 
+   * [ALGORITHM] State Snapshot Mechanism
+   * These functions enable the 'Play/Stop' behavior.
+   * - saveSnapshot: Serializes all entity transforms and materials into a JSON array before entering Simulate/Game mode.
+   * - restoreSnapshot: Clears the modified entities and recreates them from the JSON array, ensuring the scene returns to its exact original state.
+   */
   void saveSnapshot() {
     sceneSnapshot = new JSONArray();
     for (int i=0; i<entities.size(); i++) {
@@ -97,6 +116,17 @@ class SceneManager {
     return e;
   }
   
+  /**
+   * triggerEvent() - Logic Dispatcher
+   * 
+   * Routes events (OnStart, OnUpdate, onClick, etc.) to their respective handlers:
+   * 1. Check if the entity has a Visual Logic Blueprint (VLB) PDES script for the event.
+   * 2. Check if the entity has mounted external PDES script files.
+   * 3. Execute found scripts via ScriptManager.
+   * 
+   * @param e    The target entity (null for global Level events).
+   * @param type The event keyword.
+   */
   void triggerEvent(Entity e, String type) {
     if (e == null && !type.equals("Start") && !type.equals("Update")) return;
     
@@ -148,6 +178,13 @@ class SceneManager {
     }
   }
   
+  /**
+   * [ALGORITHM] updateShaderLights() - Uniform Injection
+   * 
+   * Collects the first 5 visible PointLights in the scene, transforms their world positions
+   * into View Space (using the current modelview matrix), and injects them into the PBR shader
+   * as GLSL Uniform arrays. Also handles IBL (Environment Map) binding.
+   */
   void updateShaderLights(PShader shader) {
     if (shader == null) return;
     
@@ -251,6 +288,12 @@ class SceneManager {
     selectedEntities.clear();
   }
   
+  /**
+   * saveScene() / loadScene() - Persistence
+   * 
+   * Serializes the entire scene (Meta settings, Level Blueprints, and all Entities) to
+   * a custom .p3de JSON file. Handles recursive hierarchy preservation on load.
+   */
   void saveScene(File file) {
     if (file == null) return;
     

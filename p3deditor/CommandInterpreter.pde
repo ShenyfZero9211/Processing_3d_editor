@@ -1,6 +1,13 @@
-import java.util.Map;
-import java.util.HashMap;
-
+/**
+ * CommandInterpreter.pde - PDES Vocabulary & Dispatcher
+ * 
+ * Version: v0.4.9
+ * Responsibilities:
+ * - Defines the execution logic for all text-based engine commands.
+ * - Handles alias expansion and recursive command resolution.
+ * - Implements argument parsing with support for quoted strings.
+ * - Bridges high-level script intent to low-level engine state changes.
+ */
 class CommandInterpreter {
   SceneManager scene;
   String lastResult = "";
@@ -17,6 +24,15 @@ class CommandInterpreter {
     this.scriptManager = sm;
   }
   
+  /**
+   * execute() - Command Dispatcher
+   * 
+   * [ALGORITHM] Command Resolution Pipe
+   * 1. Splits semicolon-separated commands for batch execution.
+   * 2. Tokenizes the command string into parts.
+   * 3. Resolves aliases recursively (up to MAX_RECURSION).
+   * 4. Dispatches the command to its implementation block (if, move, tp, etc.).
+   */
   String execute(String cmdLine) {
     if (cmdLine == null || cmdLine.trim().isEmpty()) return "";
     
@@ -386,6 +402,14 @@ class CommandInterpreter {
     return "SUCCESS: Executed " + count + " instructions from " + filename;
   }
   
+  /**
+   * parseArgs() - Tokenizer
+   * 
+   * [ALGORITHM] Quote-Aware Splitting
+   * Splits a command line into space-separated tokens while treating text 
+   * within quotes (e.g. "My Entity Name") as a single argument. This is 
+   * critical for handling object names with spaces.
+   */
   ArrayList<String> parseArgs(String line) {
     ArrayList<String> args = new ArrayList<String>();
     boolean inQuotes = false;

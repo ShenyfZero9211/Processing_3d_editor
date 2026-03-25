@@ -1,10 +1,27 @@
-import java.util.Stack;
+/**
+ * Command.pde - Undo/Redo System Implementation
+ * 
+ * Version: v0.4.9
+ * Responsibilities:
+ * - Implements the 'Command' design pattern to capture user actions as objects.
+ * - Manages the Undo and Redo stacks via UndoManager.
+ * - Provides specific command implementations for transforms, hierarchy changes, 
+ *   and property edits.
+ */
 
 abstract class Command {
   abstract void execute();
   abstract void undo();
 }
 
+/**
+ * UndoManager - Stack Manager
+ * 
+ * [ALGORITHM] Dual-Stack Undo/Redo
+ * Maintains two stacks: 'undoStack' for past actions and 'redoStack' for 
+ * undone actions. When a new command is pushed, the redoStack is cleared 
+ * to ensure linear history.
+ */
 class UndoManager {
   Stack<Command> undoStack = new Stack<Command>();
   Stack<Command> redoStack = new Stack<Command>();

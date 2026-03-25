@@ -1,9 +1,26 @@
+/**
+ * Gizmo.pde - 3D Transformation Handles
+ * 
+ * Version: v0.4.9
+ * Responsibilities:
+ * - Renders Translate, Rotate, and Scale handles in the 3D viewport.
+ * - Manages hit-testing for axis-specific mouse dragging.
+ * - Implements 'Constant Screen Size' logic for distance-agnostic manipulation.
+ * - Handles both World and Local coordinate space visualizations.
+ */
 class Gizmo {
   float baseSize = 110;
   float baseThick = 4.5f;
   int hoverAxis = 0;
   int mode = 1; // 1=Translate, 2=Rotate, 3=Scale, 4=Select
   
+  /**
+   * getCenter() - Selection Group Centroid
+   * 
+   * Calculates the mathematical center of the current selection. For a single
+   * entity, returns its world position. For multiple entities, returns the 
+   * average position of all members.
+   */
   PVector getCenter(SceneManager scene) {
     if (scene.selectedEntities.isEmpty()) return null;
     if (scene.selectedEntities.size() == 1) return scene.selectedEntities.get(0).getWorldPosition();
@@ -16,6 +33,15 @@ class Gizmo {
     return center;
   }
   
+  /**
+   * render() - Gizmo HUD Pass
+   * 
+   * [ALGORITHM] Constant Screen Size Magic
+   * Calculates the distance from the camera to the gizmo's center and scales 
+   * the geometry proportionally. This ensures that the handles always appear 
+   * the same size on screen, preventing them from becoming too small to click 
+   * at long distances or too large when close.
+   */
   void render(PApplet app, SceneManager scene) {
     if (mode == 4 || scene.selectedEntities.isEmpty()) return;
     
@@ -144,6 +170,16 @@ class Gizmo {
     app.endShape();
   }
 
+  /**
+   * checkHit() - Transform Handle Detection
+   * 
+   * [ALGORITHM] Axis picking
+   * For Translate/Scale: Uses AABB intersection on virtual boxes surrounding
+   * the axes.
+   * For Rotate: Uses Ray-Plane intersection followed by a distance check to
+   * detect clicks on the ring perimeter.
+   * Supports Local Space by pre-rotating the check-ray.
+   */
   int checkHit(Ray worldRay, SceneManager scene, Raycaster rc) {
     if (mode == 4 || scene.selectedEntities.isEmpty()) return 0;
     

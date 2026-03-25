@@ -1,3 +1,14 @@
+/**
+ * BlueprintEditor.pde - Visual Logic Workspace
+ * 
+ * Version: v0.4.9
+ * Responsibilities:
+ * - Provides an interactive 'Node Graph' canvas for visual programming.
+ * - Handles infinite panning, zooming, and grid rendering.
+ * - Manages node lifecycle: spawning, dragging, connecting, and deletion.
+ * - Implements the 'Compile' bridge to the PDES Scripting system.
+ * - Supports 'Hot-Reload' of logic during engine play sessions.
+ */
 class BlueprintEditor {
   Blueprint activeBlueprint = null;
   boolean visible = false;
@@ -30,7 +41,7 @@ class BlueprintEditor {
   float menuScrollY = 0;      // v1.2: Menu scroll offset
   
   // v1.0: Categorized Node Menu
-  String[] menuCategories = { "â€” Action â€”", "â€” Logic â€”", "â€” Math â€”", "â€” Data â€”", "â€” Event â€”", "â€” Value â€”" };
+  String[] menuCategories = { "â€?Action â€?, "â€?Logic â€?, "â€?Math â€?, "â€?Data â€?, "â€?Event â€?, "â€?Value â€? };
   String[][] menuItems = {
     { "Action: Wait", "Action: Log", "Action: Print", "Action: Set Position", "Action: Spawn Entity", "Action: Set Visibility", "Action: Light Settings", "Action: Set Background", "Action: Camera Teleport", "Action: Get Visibility" },
     { "Logic: Branch", "Logic: Compare", "Logic: Counter", "Logic: AND", "Logic: OR", "Logic: NOT" },
@@ -74,6 +85,16 @@ class BlueprintEditor {
     return null;
   }
   
+  /**
+   * render() - Blueprint Canvas Pass
+   * 
+   * [ALGORITHM] Layer-based UI Composition
+   * Draws the visual graph in clear depth stages:
+   * 1. Background Grid (infinite parallax).
+   * 2. Bezier Connections (wire layer).
+   * 3. VLB Nodes (interactive blocks).
+   * 4. Overlays (Compiling status, Menu, Headers).
+   */
   void render() {
     if (!visible || activeBlueprint == null) return;
     
@@ -153,7 +174,7 @@ class BlueprintEditor {
       float pulse = sin((millis() - compileFlashTime) * 0.005f) * 0.3f + 0.7f;
       fill(lerpColor(color(45, 140, 45), color(80, 255, 80), pulse));
       rect(runX, 10, 100, 25, 4);
-      fill(255); textSize(11); textAlign(CENTER, CENTER); text("âœ“ Compiled!", runX + 50, 22);
+      fill(255); textSize(11); textAlign(CENTER, CENTER); text("âœ?Compiled!", runX + 50, 22);
     } else {
       if (mouseX > runX && mouseX < runX + 100 && mouseY > 10 && mouseY < 35) fill(60, 180, 60); else fill(45, 70, 45);
       rect(runX, 10, 100, 25, 4);
@@ -349,7 +370,15 @@ class BlueprintEditor {
     bezier(x1, y1, x1 + ctrlOffset, y1, x2 - ctrlOffset, y2, x2, y2);
   }
   
-  // === MOUSE PRESSED ===
+  /**
+   * handleMousePressed() / Dragged() / Released()
+   * 
+   * [ALGORITHM] Graph Interaction Workflow
+   * - Left-Click: Node selection or Pin drag start (wiring).
+   * - Box Select: Dragging on empty space to group-select nodes.
+   * - Right-Drag: Viewport panning.
+   * - Context Menu: Right-click on empty space to spawn nodes.
+   */
   void handleMousePressed() {
     if (!visible || activeBlueprint == null) return;
     
@@ -450,7 +479,7 @@ class BlueprintEditor {
       if (cwx > n.x && cwx < n.x + n.w && cwy > n.y && cwy < n.y + n.h) {
         // v1.4: If clicking an already-selected node, keep multi-selection for group drag
         if (n.selected) {
-          // Already selected â€” just set as drag target, don't clear others
+          // Already selected â€?just set as drag target, don't clear others
           draggingNode = n;
         } else {
           if (!p3deditor.this.keyPressed || (p3deditor.this.key != 17 && p3deditor.this.keyCode != p3deditor.this.CONTROL)) {
@@ -661,17 +690,24 @@ class BlueprintEditor {
     editingPinText = "";
   }
   
-  // v1.7: Sync Expression Pins based on variables in the "Expression" pin
+  /**
+   * [ALGORITHM] syncExpressionPins() - Dynamic Reflection
+   * 
+   * This critical algorithm parses a mathematical expression string (e.g. "sin(val) * 10")
+   * and automatically generates input pins for every undefined variable ("val") 
+   * found in the string. It preserves existing connections during the sync, 
+   * enabling seamless 'Expressive Programming'.
+   */
   void syncExpressionPins(VLBNode n) {
      VLBPin exprPin = n.findPin("Expression", true);
      if (exprPin == null) return;
      
      String expr = exprPin.sVal;
-     java.util.HashSet<String> vars = new java.util.HashSet<String>();
-     java.util.regex.Matcher m = java.util.regex.Pattern.compile("[a-zA-Z_][a-zA-Z0-9_]*").matcher(expr);
+     HashSet<String> vars = new HashSet<String>();
+     Matcher m = Pattern.compile("[a-zA-Z_][a-zA-Z0-9_]*").matcher(expr);
      
      // Reserved words to ignore (functions and constants)
-     java.util.List<String> reserved = java.util.Arrays.asList(
+     List<String> reserved = Arrays.asList(
        "sin", "cos", "tan", "sqrt", "abs", "rand", "min", "max", "PI", "E", "time", "dt"
      );
      

@@ -1,3 +1,13 @@
+/**
+ * EditorCamera.pde - Dual-Mode Viewport Controller
+ * 
+ * Version: v0.4.9
+ * Responsibilities:
+ * - Manages 3D viewport navigation (Fly Mode and Orbit Mode).
+ * - Derives World-Space basis vectors (Forward/Right/Up) from Euler angles.
+ * - Handles 'Fly Mode' using Robot-based cursor locking and WASD movement.
+ * - Handles 'Orbit Mode' using pivot-based rotation, panning, and zooming.
+ */
 class EditorCamera {
   PVector pos = new PVector(0, -100, 400); 
   PVector target = new PVector(0, 0, 0);
@@ -24,7 +34,15 @@ class EditorCamera {
     updatePosFromTarget();
   }
   
-  // Mathematical derivation of View space basis vectors mapped to World space
+  /**
+   * getForward() / getRight() / getUp()
+   * 
+   * [ALGORITHM] View Space Basis Derivation
+   * Uses spherical coordinates (Pitch/Yaw) to derive the Forward vector.
+   * The Right vector is the cross product of Up(0,1,0) and Forward.
+   * The local Up vector is the cross product of Right and Forward, 
+   * ensuring an orthonormal basis for the camera's view matrix.
+   */
   PVector getForward() { 
     return new PVector(cos(rotX)*sin(rotY), -sin(rotX), -cos(rotX)*cos(rotY)); 
   }
@@ -51,7 +69,15 @@ class EditorCamera {
     target = PVector.add(pos, PVector.mult(getForward(), orbitDistance));
   }
   
-  // Called every frame
+  /**
+   * update() - Every Frame Logic
+   * 
+   * [ALGORITHM] Fly Mode & Cursor Lock
+   * If Right-Click is held (and Alt is NOT held), the system:
+   * 1. Hides the system cursor and locks it to the center of the screen using Java Robot.
+   * 2. Accumulates mouse delta into rotation (Pitch/Yaw).
+   * 3. Processes WASDQE keys for translation relative to the camera's orientation.
+   */
   void update(boolean[] keyStates) {
     if (isRightDragging && !isAltDown) { // Fly mode WASD movement and Cursor Lock
       
@@ -112,6 +138,15 @@ class EditorCamera {
     if (mouseButton == RIGHT) isRightDragging = true;
   }
   
+  /**
+   * handleMouseDragged() - Interaction Routing
+   * 
+   * [ALGORITHM] Orbit Mode logic
+   * If Alt is held:
+   * - Left Mouse: Orbit (rotate camera around 'target' point).
+   * - Center Mouse: Pan (move both 'pos' and 'target' on the camera plane).
+   * - Right Mouse: Zoom (adjust 'orbitDistance').
+   */
   void handleMouseDragged(boolean isAltDown) {
     float dx = mouseX - lastMouseX;
     float dy = mouseY - lastMouseY;

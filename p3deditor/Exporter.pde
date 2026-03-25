@@ -1,6 +1,13 @@
 /**
- * Standalone Exporter Utility (v2.1)
- * Bundles scene data and assets into a portable distribution folder.
+ * Exporter.pde - Project Distribution Engine
+ * 
+ * Version: v0.4.9
+ * Responsibilities:
+ * - Bundles scene data, 3D models, textures, and engine source into a 
+ *   portable distribution folder.
+ * - Implements 'Path Relativization' to ensure exported projects are 
+ *   location-independent.
+ * - Generates a specialized 'Player' entry point for standalone execution.
  */
 class Exporter {
   SceneManager scene;
@@ -9,6 +16,18 @@ class Exporter {
     this.scene = sc;
   }
   
+  /**
+   * build() - Project Packaging Entry
+   * 
+   * [ALGORITHM] Distribution Pipeline
+   * 1. Creates a 'data' subfolder for assets.
+   * 2. Scans all scene entities for external dependencies (OBJs, Textures).
+   * 3. Copies assets to the redistribution folder and records their new 
+   *    relative paths.
+   * 4. Generates a 'P3DJSON' file with relativized paths.
+   * 5. Injects the engine runtime source files.
+   * 6. Generates a custom .pde project file to serve as the launcher.
+   */
   void build(String projectPath) {
     println("--- START STANDALONE BUILD ---");
     File buildDir = new File(projectPath);
@@ -119,6 +138,13 @@ class Exporter {
     copyAsset(sketchPath("data/pbr.vert"), new File(destPath, "data/pbr.vert").getAbsolutePath());
   }
   
+  /**
+   * [ALGORITHM] generatePlayerPDE() - Dynamic Source Generation
+   * 
+   * Programmatically writes a minimal 'Play-Only' version of the engine. 
+   * This generated code removes the Editor UI and Gizmos, focusing solely 
+   * on PBR rendering and running the attached PDES scripts.
+   */
   void generatePlayerPDE(String folderPath, String projectName) {
     String filename = projectName + ".pde";
     String[] code = {

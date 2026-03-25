@@ -1,10 +1,13 @@
-import java.util.*;
-
 /**
- * P3DE Logic-Script (P3DES) Engine
- * Supports multi-threaded, frame-by-frame script execution with wait, goto, and variables.
+ * ScriptContext - Atomic Execution Unit
+ * 
+ * Version: v0.4.9
+ * Responsibilities:
+ * - Maintains the state of a single running PDES script (Program Counter, 
+ *   Variables, Loop Stacks).
+ * - Implements the instruction fetching and decoding logic.
+ * - Handles synchronization with the 'WAIT' command and 'GOTO' labels.
  */
-
 class ScriptContext {
   String scriptName;
   String[] lines;
@@ -34,6 +37,15 @@ class ScriptContext {
     }
   }
   
+  /**
+   * update() - Instruction Execution Loop
+   * 
+   * [ALGORITHM] Bytecode-less Interpreter
+   * Executes PDES instructions line-by-line using a Program Counter (pc).
+   * Supports 'Burst Execution' (up to 100 lines per frame) to ensure logic 
+   * doesn't lag behind rendering, while respecting 'Wait' commands which 
+   * pause the specific context.
+   */
   void update(CommandInterpreter interpreter) {
     if (terminated || pc >= lines.length) {
       terminated = true;
@@ -250,7 +262,14 @@ class ScriptContext {
     return false;
   }
   
-  // v1.7: Recursive Descent Parser for Math Expressions
+  /**
+   * [ALGORITHM] evalExpression() - Recursive Descent Parser
+   * 
+   * A classic top-down, non-backtracking parser for complex mathematical 
+   * expressions. It resolves operator precedence (Parentheses > Power > 
+   * Mul/Div > Add/Sub) and provides access to real-time engine variables 
+   * and functions (sin, cos, time, dt).
+   */
   double evalExpression(final String str) {
     return new Object() {
         int pos = -1, ch;
@@ -372,6 +391,14 @@ class ScriptContext {
   }
 }
 
+/**
+ * ScriptManager - Runtime Hub
+ * 
+ * [ALGORITHM] Scheduler & Variable Registry
+ * Manages the collection of active ScriptContexts. It provides a shared 
+ * variable pool (debugVariables) that allows the editor UI to peak into 
+ * running scripts and display real-time values on nodes.
+ */
 class ScriptManager {
   ArrayList<ScriptContext> activeScripts = new ArrayList<ScriptContext>();
   CommandInterpreter interpreter;

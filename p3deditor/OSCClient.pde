@@ -1,9 +1,12 @@
-import java.net.*;
-import java.io.*;
-
 /**
- * P3DE Native OSC (Open Sound Control) Dispatcher
- * Zero-dependency UDP packet builder for sending 3D telemetry to TouchDesigner/Ableton
+ * OSCClient.pde - P3DE Native OSC Dispatcher
+ * 
+ * Version: v0.4.9
+ * Responsibilities:
+ * - Implements a zero-dependency OSC (Open Sound Control) builder.
+ * - Handles UDP packet construction for real-time 3D telemetry.
+ * - Supports type tagging (i, f, s) and binary padding.
+ * - Facilitates synchronization with TouchDesigner, Ableton Live, and Max/MSP.
  */
 class OSCMessage {
     String address;
@@ -30,6 +33,12 @@ class OSCMessage {
         try { out.writeInt(v); } catch (Exception e) {}
     }
     
+    /**
+     * [ALGORITHM] Bytecode Construction
+     * Converts the structured address, type tags, and arguments into a standard 
+     * OSC-compliant byte array. Each string and data block is padded to a 
+     * 32-bit (4-byte) boundary as per the OSC 1.0 specification.
+     */
     byte[] toByteArray() {
         ByteArrayOutputStream finalStream = new ByteArrayOutputStream();
         try {

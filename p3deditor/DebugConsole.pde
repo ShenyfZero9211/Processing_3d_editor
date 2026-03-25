@@ -1,6 +1,13 @@
-import java.io.*;
-import java.util.*;
-
+/**
+ * DebugConsole.pde - Engine Diagnostic Terminal
+ * 
+ * Version: v0.4.9
+ * Responsibilities:
+ * - Provides a 'Quake-style' dropdown terminal for direct command entry.
+ * - Manages session-based logging with persistence to disk (.log files).
+ * - Implements input history (Up/Down) and multi-line message rendering.
+ * - Serves as the primary feedback loop for PDES script execution.
+ */
 class LogEntry {
   String message;
   int type; // 0:Info, 1:Success, 2:Warn, 3:Error
@@ -51,6 +58,15 @@ class DebugConsole {
     }
   }
   
+  /**
+   * addLog() - Message Dispatcher
+   * 
+   * [ALGORITHM] Multi-line Log Ingestion
+   * High-level messages (like help text or batch results) containing newlines 
+   * are automatically decomposed into individual `LogEntry` objects to 
+   * maintain consistent line spacing in the terminal UI. 
+   * Also mirrors all logs to the persistent session file.
+   */
   void addLog(String msg, int type) {
     if (msg == null) return;
     
@@ -74,6 +90,14 @@ class DebugConsole {
     }
   }
   
+  /**
+   * render() - Terminal HUD Pass
+   * 
+   * [ALGORITHM] Clipped Text Rendering
+   * Draws a semi-transparent 'Glass' overlay over the viewport. 
+   * Uses `clip()` to ensure text overflow doesn't bleed into the main 3D 
+   * viewport while allowing for vertical scroll offsets.
+   */
   void render() {
     if (!active) return;
     
@@ -121,6 +145,14 @@ class DebugConsole {
     p3deditor.this.popStyle();
   }
   
+  /**
+   * handleKey() - Command Ingestion
+   * 
+   * [ALGORITHM] Buffered Input & History
+   * Accumulates keystrokes into `currentInput`. On ENTER, it pushes the 
+   * buffer to the `CommandInterpreter`, clears the buffer, and records 
+   * the command in the persistent session history for Up/Down retrieval.
+   */
   void handleKey(char key, int keyCode) {
     if (key == '`') {
       active = !active;

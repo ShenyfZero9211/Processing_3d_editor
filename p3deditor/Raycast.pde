@@ -1,3 +1,13 @@
+/**
+ * Raycast.pde - 3D Mathematical Utility Core
+ * 
+ * Version: v0.4.9
+ * Responsibilities:
+ * - Provides the 'Ray' primitive for 3D intersection.
+ * - Manages 'Raycaster' logic for unprojecting screen coordinates.
+ * - Implements intersection algorithms for AABB, Spheres, and Planes.
+ * - Handles 'Local Space' picking by transforming rays into entity coordinate systems.
+ */
 class Ray {
   PVector origin;
   PVector direction;
@@ -5,6 +15,14 @@ class Ray {
 }
 
 class Raycaster {
+  /**
+   * [ALGORITHM] getPickRay() - Secondary Unprojection
+   * 
+   * Transforms a 2D screen coordinate (the mouse) into a 3D ray in world space.
+   * 1. Converts mouse (x, y) to Normalized Device Coordinates (NDC) [-1, 1].
+   * 2. Multplies the NDC near/far plane points by the Inverse of the (Proj * View) matrix.
+   * 3. Performs W-division to arrive at World Space coordinates.
+   */
   Ray getPickRay(float mx, float my, float w, float h, PMatrix3D proj, PMatrix3D view) {
     // Combine Projection and View matrices and invert them together
     // This perfectly routes around intermediate W-division perspective losses!
@@ -52,6 +70,12 @@ class Raycaster {
     return -1;
   }
   
+  /**
+   * [ALGORITHM] intersectAABB() - Slab Method
+   * 
+   * A highly efficient ray-box intersection algorithm that calculates the
+   * interval overlap for all three axes. If the intervals overlap, a hit is recorded.
+   */
   float intersectAABB(Ray ray, PVector min, PVector max) {
     float t1 = (min.x - ray.origin.x) / ray.direction.x;
     float t2 = (max.x - ray.origin.x) / ray.direction.x;
@@ -80,6 +104,15 @@ class Raycaster {
     return -1;
   }
   
+  /**
+   * intersectEntity() - Hierarchical Picking
+   * 
+   * [ALGORITHM] Coordinate Space Inversion
+   * To support nested parent-child selection, we do not intersect in World Space.
+   * Instead, we invert the entity's World Matrix and transform the World Ray 
+   * into the Entity's Local Space. This allows us to perform simple AABB/Sphere 
+   * tests against the cube's origin (0,0,0) regardless of its rotation or parentage.
+   */
   float intersectEntity(Ray worldRay, Entity e) {
     // Use full world matrix for nested hierarchy picking
     PMatrix3D model = e.getWorldMatrix();

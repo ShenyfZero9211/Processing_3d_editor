@@ -1,16 +1,54 @@
+/**
+ * P3DE (Processing 3D Editor) - Main Entry
+ * 
+ * Overview:
+ * This file serves as the main entry point for the P3DE engine. It handles the Processing
+ * lifecycle (setup/draw), global input routing, multi-viewport logic, and coordination
+ * between the Scene, UI, and Scripting systems.
+ * 
+ * Version: v0.4.9 (Stable Milestone)
+ * Developers: SharpEye & Antigravity
+ * 
+ * ALGORITHM: Main Loop Execution
+ * 1. Update Scripts (ScriptManager)
+ * 2. Update Camera (EditorCamera)
+ * 3. Handle 3D Layer (SceneManager)
+ * 4. Handle HUD Layer (UIManager & BlueprintEditor)
+ */
+
 import java.awt.Robot;
 import java.awt.MouseInfo;
 import java.awt.Point;
 import java.awt.AWTException;
+import java.io.PrintWriter;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.File;
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.OutputStream;
+import java.net.DatagramSocket;
+import java.net.DatagramPacket;
+import java.net.InetAddress;
 
-// Main Entry for 3D Scene Editor
+import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Stack;
+import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
+
 SceneManager scene;
 EditorCamera editorCamera;
 UIManager ui;
 Raycaster raycaster;
 CommandInterpreter interpreter;
 ScriptManager scriptManager;
-BlueprintEditor vlbEditor; // v0.9.0
+BlueprintEditor vlbEditor; 
 PFont mainFont;
 Robot robot;
 
@@ -57,6 +95,14 @@ String debugText = "Ready";
 
 PGraphics pickerBuffer;
 
+/**
+ * setup() - Engine Initialization
+ * 
+ * - Configures window size (1280x720) and P3D renderer.
+ * - Initializes font system with fallback support for Chinese characters.
+ * - Bootstraps all core managers (Scene, UI, Camera, Scripting).
+ * - Loads native PBR shaders and creates default scene entities.
+ */
 void setup() {
   size(1280, 720, P3D);
   hint(ENABLE_TEXTURE_MIPMAPS);
@@ -64,7 +110,7 @@ void setup() {
   
   // Initialize Fonts: Consolas for English/Code, Heiti for Chinese (size 12 for pro look)
   java.awt.Font testFont = new java.awt.Font("Consolas", java.awt.Font.PLAIN, 12);
-  if (testFont.canDisplay('ä¸­')) {
+  if (testFont.canDisplay('ä¸?)) {
     mainFont = createFont("Consolas", 12, true); 
   } else {
     mainFont = createFont("Microsoft YaHei", 12, true); 
@@ -93,12 +139,23 @@ void setup() {
   // v0.7.0: Load PBR Shaders
   pbrShader = loadShader("pbr.frag", "pbr.vert");
   
+  // v0.4.9: Initial Scene Setup
   scene.addEntity("Cube 1", "Cube");
   scene.addEntity("Sphere 1", "Sphere");
   scene.addEntity("Light 1", "PointLight");
   scene.entities.get(2).transform.position.set(150, -200, 100);
 }
 
+/**
+ * draw() - Main Execution Loop (60 FPS)
+ * 
+ * Order of Operation:
+ * 1. Update Scripts & Logic events.
+ * 2. Update Editor Camera movement.
+ * 3. Update Scene Background and Lighting.
+ * 4. Render 3D Scene (Entities & Gizmos).
+ * 5. HUD Pass (UI, Terminal, Blueprints) with depth test disabled.
+ */
 void draw() {
   background(scene.backgroundColor);
   
@@ -572,7 +629,16 @@ void mouseDragged() {
   editorCamera.handleMouseDragged(isAltDown);
 }
 
-// Converts generic 3D vectors to exact screen overlays flawlessly ensuring boundaries!
+/**
+ * [ALGORITHM] worldToScreen()
+ * 
+ * Converts a 3D World Space vector to 2D Screen Space coordinates using
+ * manually managed Projection and ModelView matrices. This is essential
+ * for overlaying 2D UI (labels, box select) precisely over 3D objects.
+ * 
+ * @param w The 3D world position to convert.
+ * @return  A PVector where x, y are screen pixels and z is depth value (-1 to 1).
+ */
 PVector worldToScreen(PVector w) {
   float[] world = {w.x, w.y, w.z, 1};
   float[] eye = new float[4];

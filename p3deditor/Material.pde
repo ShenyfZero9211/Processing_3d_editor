@@ -1,6 +1,11 @@
 /**
- * P3DE Physical Material
- * Stores PBR properties for the Cook-Torrance BRDF shader.
+ * Material.pde - PBR Material Data Model
+ * 
+ * Version: v0.4.9
+ * Responsibilities:
+ * - Stores physical surface properties for the Cook-Torrance BRDF shader.
+ * - Manages texture slots for Albedo, Metallic, and Roughness maps.
+ * - Provides path tracking for asset packaging and standalone export.
  */
 class Material {
   int albedo = #FFFFFF;

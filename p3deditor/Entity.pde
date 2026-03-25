@@ -1,3 +1,14 @@
+/**
+ * Entity.pde - 3D Object Model
+ * 
+ * Version: v0.4.9
+ * Responsibilities:
+ * - Represents a single object in the 3D scene (Cube, Sphere, Light, etc.).
+ * - Manages transform data (Position, Rotation, Scale) and hierarchical parenting.
+ * - Handles rendering logic, including PBR material parameter passing.
+ * - Provides serialization (JSON) for scene saving and state snapshots.
+ * - Manages 'Blueprints' for visual logic assignment.
+ */
 class Entity {
   int id;
   String name;
@@ -50,6 +61,15 @@ class Entity {
     this.blueprint = new Blueprint(this);
   }
   
+  /**
+   * setParent() - Hierarchical Attachment
+   * 
+   * [ALGORITHM] World Space Preservation
+   * When attaching an entity to a new parent, if 'preserveWorld' is true,
+   * the entity's local coordinates are re-calculated relative to the new 
+   * parent's inverse matrix. This prevents the object from 'jumping' in 
+   * space when reparented.
+   */
   void setParent(Entity newParent, boolean preserveWorld) {
     if (this.parent == newParent) return;
     
@@ -86,6 +106,15 @@ class Entity {
     child.setParent(null, true);
   }
   
+  /**
+   * render() - Geometry Drawing Pass
+   * 
+   * [ALGORITHM] PBR Shader Integration
+   * 1. Applies nested TRS transformations via push/popMatrix.
+   * 2. If PBR is enabled, injects albedo, metallic, and roughness values into 
+   *    the GLSL shader as uniforms before drawing.
+   * 3. Recursively calls render() on all children.
+   */
   void render(PApplet app) {
     if (!visible) return;
     app.pushStyle();
@@ -186,6 +215,14 @@ class Entity {
     return getWorldMatrix().mult(new PVector(0,0,0), new PVector());
   }
   
+  /**
+   * getWorldMatrix() - Matrix Accumulation
+   * 
+   * [ALGORITHM] Hierarchical Recursion
+   * Recursively traverses up the parent chain to calculate the final 4x4 
+   * World Matrix for this entity. This is critical for Gizmo positioning 
+   * and local-to-world raycasting.
+   */
   PMatrix3D getWorldMatrix() {
     PMatrix3D mat = new PMatrix3D();
     if (parent != null) {
@@ -216,6 +253,13 @@ class Entity {
   }
   
   // Extract Euler angles (YXZ order) from a rotation matrix
+  /**
+   * [ALGORITHM] updateRotationFromMatrix() - Euler Extraction
+   * 
+   * Extracts Y-X-Z Euler angles from a 4x4 rotation matrix. This is used 
+   * when a selection is rotated in World Space (by the Gizmo) and we need 
+   * to convert that back into human-readable Euler angles for the Inspector.
+   */
   void updateRotationFromMatrix(PMatrix3D m) {
     // Handling Y-X-Z order (Y first, then X, then Z)
     float r11 = m.m00, r12 = m.m01, r13 = m.m02;

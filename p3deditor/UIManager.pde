@@ -1,6 +1,17 @@
+/**
+ * UIManager - The Graphical Interface & HUD System
+ * 
+ * Version: v0.4.9
+ * Responsibilities:
+ * - Renders the dual-panel editor interface (Hierarchy & Inspector).
+ * - Manages the top Menu Bar and context-sensitive dropdowns.
+ * - Handles text input for property editing and the Command Console.
+ * - Implements scrolling, dragging, and widget hit-testing.
+ * - Coordinates with BlueprintEditor for visual programming.
+ */
 class UIManager {
   SceneManager scene;
-  BlueprintEditor vlbEditor; // v0.9.0
+  BlueprintEditor vlbEditor; 
   int panelWidth = 250;
   float scrollY = 0;
   float totalContentHeight = 0;
@@ -50,6 +61,15 @@ class UIManager {
   
   boolean isEditingText() { return activeEditTarget > 0; }
   
+  /**
+   * commitEdit() - UI Data Synchronization
+   * 
+   * [ALGORITHM] Property Binding
+   * This function is triggered when Enter is pressed in an input field.
+   * It parses the 'activeEditString' (which could be a float, hex, or name)
+   * and applies it to the selected entity's transform or material properties.
+   * It also pushes a 'ValueEditCommand' to the Undo stack for rollback support.
+   */
   void commitEdit() {
     if (activeEditTarget == 100) {
       try { scene.envMapIntensity = max(0, Float.parseFloat(activeEditString)); } catch(Exception ex) {}
@@ -222,6 +242,14 @@ class UIManager {
     textAlign(LEFT, BASELINE);
   }
 
+  /**
+   * render() - Main HUD Pass
+   * 
+   * [ALGORITHM] UI Layering & Clipping
+   * Coordinates the drawing of all 2D elements. Uses depth-test disabling
+   * and clipping rectangles to ensure sidebars and consoles don't overlap 
+   * or bleed into the 3D viewport.
+   */
   void render() {
     p3deditor.this.textFont(p3deditor.this.mainFont);
     textAlign(LEFT, BASELINE);
@@ -259,6 +287,13 @@ class UIManager {
     debugConsole.render(); 
   }
   
+  /**
+   * renderHierarchy() - Scene Graph Visualization
+   * 
+   * Renders the tree of entities. Effectively a recursive visitor pattern
+   * that handles indentation, selection highlighting, and parent-child 
+   * expand/collapse logic (future-proofed).
+   */
   void renderHierarchy() {
     p3deditor.this.hint(p3deditor.this.DISABLE_DEPTH_TEST);
     p3deditor.this.resetShader();
@@ -511,6 +546,13 @@ class UIManager {
     return nextY;
   }
 
+  /**
+   * renderInspector() - Property Editor
+   * 
+   * Dynamically generates UI widgets (text fields, steppers, color swatches)
+   * based on the type of the selected entity. Supports vertical scrolling
+   * for entities with many properties (like PointLights or PBR materials).
+   */
   void renderInspector() {
     p3deditor.this.hint(p3deditor.this.DISABLE_DEPTH_TEST);
     p3deditor.this.resetShader();

@@ -1,3 +1,13 @@
+/**
+ * VLBNode.pde - Visual Logic Component Models
+ * 
+ * Version: v0.4.9
+ * Responsibilities:
+ * - Defines the data structure for 'Nodes' and 'Pins' in the VLB system.
+ * - Implements automated layout calculation for nodes.
+ * - Manages pin-level hit-testing for graph interaction.
+ * - Provides type-safe data storage for inline editing (Float, String, Bool).
+ */
 class VLBPin {
   String label;
   boolean isInput;
@@ -72,6 +82,15 @@ class VLBNode {
   }
   
   // v1.7: Calculate w and h based on pin labels and title
+  /**
+   * updateLayout() - Content-Aware Sizing
+   * 
+   * [ALGORITHM] Dynamic Bounds Calculation
+   * Measures the text width of the node title and all pin labels (including 
+   * inline editable fields) to determine the minimum required width (w). 
+   * Calculates height (h) based on the total number of input/output pins 
+   * to ensure no visual overlap.
+   */
   void updateLayout() {
     float maxLabelW = p3deditor.this.textWidth(title) + 30;
     
@@ -94,6 +113,14 @@ class VLBNode {
     h = max(60, max(inputs.size(), outputs.size()) * 20 + 35);
   }
   
+  /**
+   * getPinAt() - Visual Selection
+   * 
+   * [ALGORITHM] Row-based Hit Testing
+   * Instead of circular hit zones, this uses rectangular zones spanning 
+   * half the node's width for each pin row. This provides a more forgiving 
+   * and 'sticky' feel when wiring nodes together at different zoom levels.
+   */
   VLBPin getPinAt(float mx, float my) {
     // v1.0: Enlarged rectangular AABB hit zones covering the entire pin row
     for (VLBPin p : inputs) {
