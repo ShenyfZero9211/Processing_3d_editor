@@ -77,6 +77,8 @@ The birth of this project is the result of deep synergy between **Yifan Shen** a
 
 P3DE proves that with AI-assisted programming, developers can customize highly complex professional creation tools with minimal overhead.
 
+P3DE is proudly built using **[Processing 4](https://github.com/processing/processing4)**. We are grateful to the Processing Foundation and its community for providing such a powerful and accessible creative coding environment. Processing 4 is licensed under the [GNU LGPL](https://www.gnu.org/licenses/lgpl-3.0.html) and [GPL](https://www.gnu.org/licenses/gpl-3.0.html).
+
 ---
 
 ---
